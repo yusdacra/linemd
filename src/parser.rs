@@ -326,3 +326,65 @@ pub enum Token {
     /// A line break.
     LineBreak,
 }
+
+impl Token {
+    /// Consumes this token and returns respective HTML for it.
+    pub fn into_html(self) -> String {
+        match self {
+            Token::Text {
+                mut value,
+                bold,
+                italic,
+            } => {
+                if bold {
+                    value = surrond_in_html_tag("b", value.as_str());
+                }
+                if italic {
+                    value = surrond_in_html_tag("i", value.as_str());
+                }
+                value.push(' ');
+                value
+            }
+            Token::Code(code) => {
+                let mut code = surrond_in_html_tag("code", code.as_str());
+                code.push(' ');
+                code
+            }
+            Token::Header { depth, text } => {
+                let depth = depth.min(6).max(1);
+                surrond_in_html_tag(&format!("h{}", depth), text.into_html().as_str())
+            }
+            Token::Url {
+                name,
+                url,
+                is_image,
+            } => {
+                if is_image {
+                    format!(
+                        "<img src=\"{}\" alt=\"{}\">",
+                        url,
+                        name.map_or(url.clone(), |t| t.into_html()),
+                    )
+                } else {
+                    format!(
+                        "<a href=\"{}\">{}</a>",
+                        url,
+                        name.map_or(url.clone(), |t| t.into_html()),
+                    )
+                }
+            }
+            Token::ListItem { place, text } => {
+                if let Some(place) = place {
+                    format!("<li value=\"{}\">{}</li>", place, text.into_html())
+                } else {
+                    surrond_in_html_tag("li", text.into_html().as_str())
+                }
+            }
+            Token::LineBreak => "\n".to_string(),
+        }
+    }
+}
+
+fn surrond_in_html_tag(tag: &str, data: &str) -> String {
+    format!("<{}>{}</{}>", tag, data, tag)
+}

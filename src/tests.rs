@@ -245,3 +245,10 @@ fn unordered_lists() {
     unordered_test(parse("+ ada"));
     unordered_test(parse("* ada"));
 }
+
+#[test]
+fn to_html() {
+    let html = render_as_html(parse(include_str!("../examples/all.md")));
+    println!("{}", html);
+    assert_eq!(html, include_str!("../examples/all.html"));
+}
