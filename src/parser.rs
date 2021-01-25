@@ -129,7 +129,6 @@ impl Parser {
 
     fn parse_text(&mut self) -> Token {
         if let Some((stars, (start, end))) = self.find_star_pair() {
-            println!("pair: stars: {}, range: {} - {}", stars, stars, end);
             for _ in 0..stars {
                 self.consume_char();
             }
