@@ -18,13 +18,12 @@ let
   package = with pkgs; naersk.buildPackage {
     root = ../.;
     nativeBuildInputs = crateDeps.nativeBuildInputs;
+    cargoTestOptions = def: def ++ [ "--lib" "--tests" "--bins" "--examples" ];
     buildInputs = crateDeps.buildInputs;
     override = (prev: env);
     overrideMain = (prev: {
       inherit meta;
-
     });
-
     inherit release doCheck doDoc;
   };
 in
