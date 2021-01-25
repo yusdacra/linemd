@@ -1,0 +1,8 @@
+renders a markdown file as HTML
+
+usage:
+  linemd FILE     Reads from file
+  linemd -        Reads from stdin
+
+options:
+  -h, --help      Prints this text

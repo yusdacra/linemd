@@ -4,10 +4,7 @@ version = "0.1.0"
 authors = ["Yusuf Bera Ertan <y.bera003.06@protonmail.com>"]
 edition = "2018"
 license = "MIT"
-description = "A simple and opinionated markdown parser written in Rust."
+description = "A simple and opinionated markdown parser (and renderer) written in Rust."
 repository = "https://github.com/yusdacra/linemd"
 keywords = ["markdown", "parser", "html"]
-categories = ["parser-implementations"]
-
-[[example]]
-name = "all"
+categories = ["parser-implementations", "command-line-utilities"]
