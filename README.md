@@ -5,6 +5,10 @@
 - No deps
 - Can render to HTML (includes CLI utility to render to HTML)
 
+## Install
+Nix:
+- Flakes: `nix profile install github:yusdacra/linemd`
+
 ## Usage
 ```rust
 let md: String;
