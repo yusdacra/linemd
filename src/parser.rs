@@ -9,8 +9,8 @@ impl Parser {
         Self::default()
     }
 
-    pub fn feed(&mut self, input: impl AsRef<str>) {
-        self.input += input.as_ref();
+    pub fn feed(&mut self, input: &str) {
+        self.input += input;
     }
 
     pub fn parse(&mut self) -> Vec<Token> {
