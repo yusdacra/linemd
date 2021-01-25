@@ -3,7 +3,7 @@
 
 ## Features
 - No deps
-- Can render to HTML
+- Can render to HTML (includes CLI utility to render to HTML)
 
 ## Usage
 ```rust
@@ -18,6 +18,18 @@ You can also render as HTML:
 let parsed_tokens: Vec<Token>;
 
 let html = linemd::render_as_html(parsed_tokens);
+```
+
+CLI usage:
+```
+renders a markdown file as HTML
+
+usage:
+  linemd FILE     Reads from file
+  linemd -        Reads from stdin
+
+options:
+  -h, --help      Prints this text
 ```
 
 Also see [examples](examples) directory.
