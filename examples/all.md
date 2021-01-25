@@ -3,6 +3,14 @@
 - Listing
 - Listed
 
+* List
+* Listing
+* Listed
+
++ List
++ Listing
++ Listed
+
 1. List
 2. Listing
 3. Listed

@@ -2,7 +2,7 @@
 `linemd` is a simple and opinionated markdown crate.
 
 ## Usage
-```rs
+```rust
 let md;
 
 let tokens = linemd::parse(md);
