@@ -1,3 +1,4 @@
+/// A markdown parser.
 #[derive(Debug, Clone, Default)]
 pub struct Parser {
     input: String,
@@ -5,14 +6,17 @@ pub struct Parser {
 }
 
 impl Parser {
+    /// Create a new and empty parser.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Add the parser some input, which will be parsed on the next [`Parser::parse()`] call.
     pub fn feed(&mut self, input: &str) {
         self.input += input;
     }
 
+    /// Parse the feeded inputs and return tokens.
     pub fn parse(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
 
@@ -292,27 +296,33 @@ fn is_header(c: char) -> bool {
     c == '#'
 }
 
+/// A token from some parsed text.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Token {
+    /// Some text.
     Text {
         value: String,
         bold: bool,
         italic: bool,
     },
+    /// An URL.
     Url {
+        /// Name of this URL (ie. the text in `[]`, if it exists).
         name: Option<Box<Token>>,
+        /// Actual URL. Note that this does not get checkec to see if it's a valid URL or not.
         url: String,
         is_image: bool,
     },
-    Header {
-        depth: usize,
-        text: Box<Token>,
-    },
+    /// A header.
+    Header { depth: usize, text: Box<Token> },
+    /// A list item, which can be ordered or unordered.
     ListItem {
-        /// If `None`, then it is unordered.
+        /// If `None`, then it is an unordered item.
         place: Option<usize>,
         text: Box<Token>,
     },
+    /// Some code.
     Code(String),
+    /// A line break.
     LineBreak,
 }
