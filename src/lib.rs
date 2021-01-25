@@ -34,8 +34,10 @@ pub fn parse(md: impl AsRef<str>) -> Vec<Token> {
 /// ```
 pub fn render_as_html(tokens: Vec<Token>) -> String {
     let mut html = String::new();
+
     let mut unordered_list = false;
     let mut ordered_list = false;
+
     let mut was_line_break = false;
 
     for token in tokens {

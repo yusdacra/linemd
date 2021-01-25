@@ -61,6 +61,7 @@ impl Parser {
             {
                 self.parse_naked_url()
             }
+            '`' if self.code_fence() => self.parse_code_fence(),
             '`' if self.code_end() => self.parse_code(),
             _ => self.parse_text(),
         };
@@ -119,6 +120,48 @@ impl Parser {
         false
     }
 
+    fn code_fence(&self) -> bool {
+        let mut at = self.at;
+
+        let mut ticks_start = 0;
+
+        while let Some(c) = self.char_at(at) {
+            if c == '`' {
+                ticks_start += 1;
+                at += 1;
+            } else {
+                break;
+            }
+        }
+
+        if ticks_start != 3 {
+            return false;
+        }
+
+        while let Some(c) = self.char_at(at) {
+            if c != '`' {
+                at += 1;
+            } else {
+                break;
+            }
+        }
+
+        let mut ticks_end = 0;
+
+        while let Some(c) = self.char_at(at) {
+            if c == '`' {
+                ticks_end += 1;
+                at += 1;
+            }
+        }
+
+        if ticks_end != 3 {
+            return false;
+        }
+
+        true
+    }
+
     fn parse_code(&mut self) -> Token {
         self.consume_char();
         let code = self.consume_while(|c| c != '`');
@@ -127,18 +170,38 @@ impl Parser {
         Token::Code(code)
     }
 
+    fn parse_code_fence(&mut self) -> Token {
+        self.consume_times(3);
+
+        let attrs: Vec<String> = self
+            .consume_while(is_not_newline)
+            .split(',')
+            .filter_map(|c| {
+                if c.is_empty() {
+                    None
+                } else {
+                    Some(c.to_string())
+                }
+            })
+            .collect();
+
+        let code = self
+            .consume_while(|c| c != '`')
+            .trim_matches(is_newline)
+            .to_string();
+
+        self.consume_times(3);
+        Token::CodeFence { attrs, code }
+    }
+
     fn parse_text(&mut self) -> Token {
         if let Some((stars, (start, end))) = self.find_star_pair() {
-            for _ in 0..stars {
-                self.consume_char();
-            }
+            self.consume_times(stars);
             let mut text = String::with_capacity(end - start);
             for _ in start..end {
                 text.push(self.consume_char());
             }
-            for _ in 0..stars {
-                self.consume_char();
-            }
+            self.consume_times(stars);
             Token::Text {
                 value: text,
                 italic: stars != 2,
@@ -270,6 +333,14 @@ impl Parser {
         ch
     }
 
+    fn consume_times(&mut self, times: usize) -> String {
+        let mut result = String::new();
+        for _ in 0..times {
+            result.push(self.consume_char());
+        }
+        result
+    }
+
     fn consume_while<F: Fn(char) -> bool>(&mut self, cond: F) -> String {
         let mut result = String::new();
         while !self.eol() && cond(self.next_char()) {
@@ -322,6 +393,8 @@ pub enum Token {
     },
     /// Some code.
     Code(String),
+    /// A code fence. (\`\`\`)
+    CodeFence { code: String, attrs: Vec<String> },
     /// A line break.
     LineBreak,
 }
@@ -348,6 +421,9 @@ impl Token {
                 let mut code = surrond_in_html_tag("code", code.as_str());
                 code.push(' ');
                 code
+            }
+            Token::CodeFence { code, attrs: _ } => {
+                format!("<code>\n{}\n</code>\n", code)
             }
             Token::Header { depth, text } => {
                 let depth = depth.min(6).max(1);

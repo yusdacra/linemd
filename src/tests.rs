@@ -38,6 +38,35 @@ fn code() {
             }
         ]
     );
+    assert_eq!(
+        parse("````"),
+        vec![Token::Code("".to_string()), Token::Code("".to_string())]
+    );
+}
+
+#[test]
+fn code_fence() {
+    assert_eq!(
+        parse("```\ntest\n```"),
+        vec![Token::CodeFence {
+            attrs: vec![],
+            code: "test".to_string(),
+        }]
+    );
+    assert_eq!(
+        parse("```rust\ntest\n```"),
+        vec![Token::CodeFence {
+            attrs: vec!["rust".to_string()],
+            code: "test".to_string(),
+        }]
+    );
+    assert_eq!(
+        parse("```rust,norun\ntest\n```"),
+        vec![Token::CodeFence {
+            attrs: vec!["rust".to_string(), "norun".to_string()],
+            code: "test".to_string(),
+        }]
+    );
 }
 
 #[test]
