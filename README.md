@@ -34,6 +34,11 @@ usage:
 
 options:
   -h, --help      Prints this text
+
+exit codes:
+  0               Everything was successful
+  1               Failed to read the given file
+  2               Failed to read from stdin
 ```
 
 Also see [examples](examples) directory.
