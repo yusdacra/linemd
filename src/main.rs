@@ -24,17 +24,10 @@ fn main() {
                 }
             }
         };
-        process(md);
-    } else {
-        println!("{}", HELP_TEXT);
-    }
-}
 
-fn process(md: String) {
-    if !md.is_empty() {
         let html = render_as_html(parse(md));
         println!("{}", html);
     } else {
-        println!("no input given, doing nothing");
+        println!("{}", HELP_TEXT);
     }
 }
