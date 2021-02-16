@@ -6,21 +6,14 @@
 }:
 with common;
 let
-  meta = with pkgs.stdenv.lib; {
-    description = "Description for linemd";
-    longDescription = ''Long description for linemd.'';
-    homepage = "https://github.com/<owner>/linemd";
+  meta = with pkgs.lib; {
+    homepage = "https://github.com/yusdacra/linemd";
     license = licenses.mit;
   };
 
-
-
   package = with pkgs; naersk.buildPackage {
     root = ../.;
-    nativeBuildInputs = crateDeps.nativeBuildInputs;
     cargoTestOptions = def: def ++ [ "--lib" "--tests" "--bins" "--examples" ];
-    buildInputs = crateDeps.buildInputs;
-    override = (prev: env);
     overrideMain = (prev: {
       inherit meta;
     });

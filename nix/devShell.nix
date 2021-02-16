@@ -1,11 +1,13 @@
 { common }:
 with common; with pkgs;
 devshell.mkShell {
-  packages =
-    [ git nixpkgs-fmt rustc ]
-    ++ crateDeps.nativeBuildInputs ++ crateDeps.buildInputs;
-  env = {
-
-    LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${lib.makeLibraryPath neededLibs}";
-  } // env;
+  packages = [ rustc ];
+  commands =
+    let
+      pkgc = pkg: { package = pkg; };
+    in
+    [
+      (pkgc git)
+      (pkgc nixpkgs-fmt)
+    ];
 }
