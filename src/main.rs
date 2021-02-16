@@ -12,7 +12,7 @@ fn main() {
             let mut input = String::new();
             if let Err(err) = stdin().read_to_string(&mut input) {
                 eprintln!("failed to read from stdin: {}", err);
-                std::process::exit(1);
+                std::process::exit(2);
             }
             input
         } else {
