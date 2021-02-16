@@ -1,3 +1,6 @@
+[![crates.io](https://img.shields.io/crates/v/linemd)](https://crates.io/crates/linemd)
+[![docs.rs](https://docs.rs/linemd/badge.svg)](https://docs.rs/linemd)
+
 # linemd
 `linemd` is a simple and opinionated markdown crate.
 
