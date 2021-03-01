@@ -2,8 +2,7 @@
 [![docs.rs](https://docs.rs/linemd/badge.svg)](https://docs.rs/linemd)
 
 # linemd
-`linemd` is a simple and opinionated markdown crate.
-
+`linemd` is a simple, no deps, markdown parser and renderer.
 ## Features
 - No deps
 - Can render to HTML (includes CLI utility to render to HTML)
