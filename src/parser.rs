@@ -367,7 +367,7 @@ fn is_header(c: char) -> bool {
 }
 
 /// A token from some parsed text.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Token {
     /// Some text.
     Text {
