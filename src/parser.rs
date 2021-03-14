@@ -34,7 +34,8 @@ impl Parser {
             return None;
         }
 
-        let token = match self.next_char() {
+        let c = self.next_char()?;
+        let token = match c {
             '\n' => {
                 self.consume_char();
                 Token::LineBreak
@@ -43,69 +44,69 @@ impl Parser {
                 .after_while(|c| is_header(c) && is_not_newline(c))
                 .map_or(false, char::is_whitespace) =>
             {
-                self.parse_header()
+                self.parse_header()?
             }
             '+' | '-' | '*' if self.char_at(self.at + 1).map_or(false, char::is_whitespace) => {
-                self.parse_unordered_list()
+                self.parse_unordered_list()?
             }
             '0'..='9'
                 if self
                     .after_while(|c| c.is_numeric() && is_not_newline(c))
                     .map_or(false, |c| c == '.') =>
             {
-                self.parse_ordered_list()
+                self.parse_ordered_list()?
             }
             '<' if self
                 .after_while(|c| c != '>' && is_not_newline(c))
                 .is_some() =>
             {
-                self.parse_naked_url()
+                self.parse_naked_url()?
             }
-            '`' if self.code_fence() => self.parse_code_fence(),
-            '`' if self.code_end() => self.parse_code(),
-            _ => self.parse_text(),
+            '`' if self.code_fence() => self.parse_code_fence()?,
+            '`' if self.code_end() => self.parse_code()?,
+            _ => self.parse_text()?,
         };
 
         Some(token)
     }
 
-    fn parse_header(&mut self) -> Token {
-        let depth = self.consume_while(is_header).len();
+    fn parse_header(&mut self) -> Option<Token> {
+        let depth = self.consume_while(is_header)?.len();
         self.consume_whitespace();
-        let text = self.parse_text().into();
-        Token::Header { depth, text }
+        let text = self.parse_text()?.into();
+        Some(Token::Header { depth, text })
     }
 
-    fn parse_ordered_list(&mut self) -> Token {
-        let place = self.consume_while(char::is_numeric).parse().unwrap();
+    fn parse_ordered_list(&mut self) -> Option<Token> {
+        let place = self.consume_while(char::is_numeric)?.parse().ok()?;
         self.consume_char();
         self.consume_whitespace();
-        let text = self.parse_text().into();
+        let text = self.parse_text()?.into();
 
-        Token::ListItem {
+        Some(Token::ListItem {
             place: Some(place),
             text,
-        }
+        })
     }
 
-    fn parse_unordered_list(&mut self) -> Token {
+    fn parse_unordered_list(&mut self) -> Option<Token> {
         self.consume_char();
         self.consume_whitespace();
-        let text = self.parse_text().into();
+        let text = self.parse_text()?.into();
 
-        Token::ListItem { place: None, text }
+        Some(Token::ListItem { place: None, text })
     }
 
-    fn parse_naked_url(&mut self) -> Token {
+    fn parse_naked_url(&mut self) -> Option<Token> {
         self.consume_char();
-        let url = self.consume_while(|c| c != '>');
+        let url = self.consume_while(|c| c != '>')?;
         self.consume_char();
 
-        Token::Url {
+        Some(Token::Url {
             is_image: false,
             name: None,
             url,
-        }
+        })
     }
 
     fn code_end(&self) -> bool {
@@ -162,19 +163,19 @@ impl Parser {
         true
     }
 
-    fn parse_code(&mut self) -> Token {
+    fn parse_code(&mut self) -> Option<Token> {
         self.consume_char();
-        let code = self.consume_while(|c| c != '`');
+        let code = self.consume_while(|c| c != '`')?;
         self.consume_char();
 
-        Token::Code(code)
+        Some(Token::Code(code))
     }
 
-    fn parse_code_fence(&mut self) -> Token {
+    fn parse_code_fence(&mut self) -> Option<Token> {
         self.consume_times(3);
 
         let attrs: Vec<String> = self
-            .consume_while(is_not_newline)
+            .consume_while(is_not_newline)?
             .split(',')
             .filter_map(|c| {
                 if c.is_empty() {
@@ -186,20 +187,20 @@ impl Parser {
             .collect();
 
         let code = self
-            .consume_while(|c| c != '`')
+            .consume_while(|c| c != '`')?
             .trim_matches(is_newline)
             .to_string();
 
         self.consume_times(3);
-        Token::CodeFence { attrs, code }
+        Some(Token::CodeFence { attrs, code })
     }
 
-    fn parse_text(&mut self) -> Token {
-        if let Some((stars, (start, end))) = self.find_star_pair() {
+    fn parse_text(&mut self) -> Option<Token> {
+        Some(if let Some((stars, (start, end))) = self.find_star_pair() {
             self.consume_times(stars);
             let mut text = String::with_capacity(end - start);
             for _ in start..end {
-                text.push(self.consume_char());
+                text.push(self.consume_char()?);
             }
             self.consume_times(stars);
             Token::Text {
@@ -211,13 +212,13 @@ impl Parser {
             let mut result = String::new();
             loop {
                 if !self.eol() {
-                    let ch = self.next_char();
+                    let ch = self.next_char()?;
                     if is_not_newline(ch)
                         && ch != '<'
                         && (ch != '`' || !self.code_end())
                         && self.find_star_pair().is_none()
                     {
-                        result.push(self.consume_char());
+                        result.push(self.consume_char()?);
                     } else {
                         break;
                     }
@@ -230,7 +231,7 @@ impl Parser {
                 bold: false,
                 italic: false,
             }
-        }
+        })
     }
 
     fn find_star_pair(&self) -> Option<(usize, (usize, usize))> {
@@ -315,8 +316,8 @@ impl Parser {
         None
     }
 
-    fn next_char(&self) -> char {
-        self.char_at(self.at).unwrap()
+    fn next_char(&self) -> Option<char> {
+        self.char_at(self.at)
     }
 
     fn char_at(&self, n: usize) -> Option<char> {
@@ -327,26 +328,26 @@ impl Parser {
         self.at >= self.input.len()
     }
 
-    fn consume_char(&mut self) -> char {
+    fn consume_char(&mut self) -> Option<char> {
         let ch = self.next_char();
         self.at += 1;
         ch
     }
 
-    fn consume_times(&mut self, times: usize) -> String {
+    fn consume_times(&mut self, times: usize) -> Option<String> {
         let mut result = String::new();
         for _ in 0..times {
-            result.push(self.consume_char());
+            result.push(self.consume_char()?);
         }
-        result
+        Some(result)
     }
 
-    fn consume_while<F: Fn(char) -> bool>(&mut self, cond: F) -> String {
+    fn consume_while<F: Fn(char) -> bool>(&mut self, cond: F) -> Option<String> {
         let mut result = String::new();
-        while !self.eol() && cond(self.next_char()) {
-            result.push(self.consume_char());
+        while !self.eol() && cond(self.next_char()?) {
+            result.push(self.consume_char()?);
         }
-        result
+        Some(result)
     }
 
     fn consume_whitespace(&mut self) {
