@@ -1,3 +1,5 @@
+use super::*;
+
 /// A markdown parser.
 #[derive(Debug, Clone, Default)]
 pub struct Parser {

@@ -1,4 +1,5 @@
 use super::*;
+use alloc::vec;
 
 #[test]
 fn just_text() {
@@ -278,6 +279,5 @@ fn unordered_lists() {
 #[test]
 fn to_html() {
     let html = render_as_html(parse(include_str!("../examples/all.md")));
-    println!("{}", html);
     assert_eq!(html, include_str!("../examples/all.html"));
 }

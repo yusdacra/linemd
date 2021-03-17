@@ -1,4 +1,13 @@
+#![no_std]
 //! `linemd` is a simple and opinionated markdown parsing library.
+
+extern crate alloc;
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 mod parser;
 #[cfg(test)]
@@ -32,7 +41,7 @@ pub fn parse(md: impl AsRef<str>) -> Vec<Token> {
 /// # use linemd::{parse, render_as_html};
 /// let html = render_as_html(parse("Some uninspiring text."));
 /// ```
-pub fn render_as_html(tokens: Vec<Token>) -> String {
+pub fn render_as_html(tokens: alloc::vec::Vec<Token>) -> String {
     let mut html = String::new();
 
     let mut unordered_list = false;
@@ -41,8 +50,20 @@ pub fn render_as_html(tokens: Vec<Token>) -> String {
     let mut was_line_break = false;
 
     for token in tokens {
-        let is_unordered_item = matches!(token, Token::ListItem { place: None, text: _ });
-        let ordered_item = matches!(token, Token::ListItem { place: Some(_), text: _ });
+        let is_unordered_item = matches!(
+            token,
+            Token::ListItem {
+                place: None,
+                text: _
+            }
+        );
+        let ordered_item = matches!(
+            token,
+            Token::ListItem {
+                place: Some(_),
+                text: _
+            }
+        );
         let is_line_break = matches!(token, Token::LineBreak);
 
         if !unordered_list && is_unordered_item {
