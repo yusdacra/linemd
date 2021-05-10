@@ -8,3 +8,7 @@ description = "A simple and opinionated markdown parser (and renderer) written i
 repository = "https://github.com/yusdacra/linemd"
 keywords = ["markdown", "parser", "html"]
 categories = ["parser-implementations", "command-line-utilities"]
+
+[package.metadata.nix]
+build = true
+app = true
