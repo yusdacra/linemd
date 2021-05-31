@@ -21,7 +21,5 @@ jobs:
           experimental-features = nix-command flakes
         nix_path: nixpkgs=channel:nixos-unstable
     
-    - name: Build
-      run: nix build .#linemd-debug -L --show-trace
     - name: Tests
-      run: nix build .#linemd-tests -L --show-trace
+      run: nix develop -c check
