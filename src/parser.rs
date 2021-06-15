@@ -404,6 +404,7 @@ pub enum Token {
 
 impl Token {
     /// Consumes this token and returns respective HTML for it.
+    #[cfg(feature = "html")]
     pub fn into_html(self) -> String {
         match self {
             Token::Text {
@@ -463,6 +464,7 @@ impl Token {
     }
 }
 
+#[cfg(feature = "html")]
 fn surrond_in_html_tag(tag: &str, data: &str) -> String {
     format!("<{}>{}</{}>", tag, data, tag)
 }

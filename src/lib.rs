@@ -2,9 +2,10 @@
 //! `linemd` is a simple and opinionated markdown parsing library.
 
 extern crate alloc;
+#[cfg(feature = "html")]
+use alloc::format;
 use alloc::{
     boxed::Box,
-    format,
     string::{String, ToString},
     vec::Vec,
 };
@@ -41,6 +42,7 @@ pub fn parse(md: impl AsRef<str>) -> Vec<Token> {
 /// # use linemd::{parse, render_as_html};
 /// let html = render_as_html(parse("Some uninspiring text."));
 /// ```
+#[cfg(feature = "html")]
 pub fn render_as_html(tokens: alloc::vec::Vec<Token>) -> String {
     let mut html = String::new();
 

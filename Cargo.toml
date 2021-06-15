@@ -9,6 +9,15 @@ repository = "https://github.com/yusdacra/linemd"
 keywords = ["markdown", "parser", "html"]
 categories = ["parser-implementations", "command-line-utilities"]
 
+[features]
+default = ["html"]
+# Enables HTML rendering code.
+html = []
+
 [package.metadata.nix]
 build = true
 app = true
+
+[[bin]]
+name = "linemd"
+required-features = ["html"]
