@@ -12,5 +12,10 @@
   outputs = inputs: inputs.nixCargoIntegration.lib.makeOutputs {
     root = ./.;
     buildPlatform = "crate2nix";
+    overrides = {
+      build = _: prev: {
+        rootFeatures = prev.rootFeatures ++ [ "svg" ];
+      };
+    };
   };
 }
