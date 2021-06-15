@@ -23,3 +23,7 @@ app = true
 [[bin]]
 name = "linemd"
 required-features = ["html", "svg"]
+
+[[example]]
+name = "all"
+required-features = ["html", "svg"]

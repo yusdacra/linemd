@@ -1,8 +1,10 @@
 const MD: &str = include_str!("all.md");
 
 fn main() {
-    let parsed = linemd::parse(MD);
-    println!("{:#?}", parsed);
-    let html: String = linemd::render_as_html(parsed);
+    let tokens = linemd::parse(MD);
+    println!("{:#?}", tokens);
+    let html = linemd::render_as_html(tokens.clone());
     println!("{}", html);
+    let svg = linemd::render_as_svg(tokens);
+    println!("{}", svg);
 }

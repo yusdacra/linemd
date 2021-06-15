@@ -276,8 +276,16 @@ fn unordered_lists() {
     unordered_test(parse("* ada"));
 }
 
+const MD: &str = include_str!("../examples/all.md");
+
 #[test]
 fn to_html() {
-    let html = render_as_html(parse(include_str!("../examples/all.md")));
+    let html = render_as_html(parse(MD));
     assert_eq!(html, include_str!("../examples/all.html"));
+}
+
+#[test]
+fn to_svg() {
+    let svg = render_as_svg(parse(MD));
+    assert_eq!(svg, include_str!("../examples/all.svg"));
 }
