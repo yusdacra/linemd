@@ -13,6 +13,8 @@ categories = ["parser-implementations", "command-line-utilities"]
 default = ["html"]
 # Enables HTML rendering code.
 html = []
+# Enables SVG rendering code.
+svg = []
 
 [package.metadata.nix]
 build = true
@@ -20,4 +22,4 @@ app = true
 
 [[bin]]
 name = "linemd"
-required-features = ["html"]
+required-features = ["html", "svg"]
