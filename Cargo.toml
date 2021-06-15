@@ -16,6 +16,9 @@ html = []
 # Enables SVG rendering code.
 svg = []
 
+[package.metadata.docs.rs]
+features = ["svg", "html"]
+
 [package.metadata.nix]
 build = true
 app = true
