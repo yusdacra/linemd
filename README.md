@@ -9,8 +9,12 @@
 - Comes with a CLI utility
 
 ## Install
-Nix:
-- Flakes: `nix profile install github:yusdacra/linemd`
+
+- Cargo: `cargo install linemd`
+- Nix:
+  - Flakes: `nix profile install github:yusdacra/linemd`
+    - Or run without installing: `nix run install github:yusdacra/linemd`
+  - Non-flakes: `nix-env -i -f "https://github.com/yusdacra/linemd/tarball/master"`
 
 ## Usage
 ```rust
