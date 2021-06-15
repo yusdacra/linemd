@@ -6,6 +6,7 @@ usage:
 
 options:
   -h, --help      Prints this text
+  -S, --svg       Renders to SVG instead of HTML
 
 exit codes:
   0               Everything was successful

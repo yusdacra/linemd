@@ -5,7 +5,8 @@
 `linemd` is a simple, no deps, markdown parser and renderer.
 ## Features
 - No deps
-- Can render to HTML (includes CLI utility to render to HTML)
+- Can render to HTML and SVG
+- Comes with a CLI utility
 
 ## Install
 Nix:
@@ -36,6 +37,7 @@ usage:
 
 options:
   -h, --help      Prints this text
+  -S, --svg       Renders to SVG instead of HTML
 
 exit codes:
   0               Everything was successful
