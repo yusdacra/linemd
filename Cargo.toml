@@ -1,12 +1,12 @@
 [package]
 name = "linemd"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Yusuf Bera Ertan <y.bera003.06@protonmail.com>"]
 edition = "2018"
 license = "MIT"
 description = "A simple and opinionated markdown parser (and renderer) written in Rust."
 repository = "https://github.com/yusdacra/linemd"
-keywords = ["markdown", "parser", "html"]
+keywords = ["markdown", "parser", "html", "svg"]
 categories = ["parser-implementations", "command-line-utilities"]
 
 [features]
