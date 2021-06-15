@@ -2,7 +2,7 @@
 //! `linemd` is a simple and opinionated markdown parsing library.
 
 extern crate alloc;
-#[cfg(feature = "html")]
+#[cfg(any(feature = "html", feature = "svg"))]
 use alloc::format;
 use alloc::{
     boxed::Box,
