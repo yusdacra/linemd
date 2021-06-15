@@ -197,7 +197,9 @@ fn try_apply_text(
     text_before: &mut usize,
     tspan_before: &mut usize,
 ) {
-    if !text.is_empty() {
+    if text.is_empty() {
+        *text_before += 1;
+    } else {
         let y = calculate_content_height(*text_before);
         write!(doc, r#"<text x="0" y="{}em">{}</text>"#, y, text).unwrap();
         text.clear();
