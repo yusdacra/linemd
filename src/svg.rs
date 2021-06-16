@@ -1,23 +1,100 @@
 use super::*;
 use core::fmt::{self, Display, Formatter, Write};
 
-pub fn render_as_svg(
-    tokens: alloc::vec::Vec<Token>,
-    with_dimensions: Option<(u32, u32)>,
-) -> String {
+#[derive(Debug)]
+pub enum ViewportDimensions<'a> {
+    /// Width and height in pixels (px).
+    Integer(u32, u32),
+    /// "raw" width and height, put in the resulting SVG as-is.
+    Raw(&'a str, &'a str),
+    /// Only the width in pixels (px) specified, height calculation is left to linemd.
+    OnlyWidth(u32),
+    /// Only the "raw" width specified, height calculation is left to linemd.
+    OnlyWidthRaw(&'a str),
+}
+
+impl<'a> Default for ViewportDimensions<'a> {
+    fn default() -> Self {
+        Self::OnlyWidthRaw("%100")
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Config<'a> {
+    dimensions: ViewportDimensions<'a>,
+    font_family: Option<&'a str>,
+    font_size: Option<&'a str>,
+    font_style: Option<&'a str>,
+    font_weight: Option<&'a str>,
+}
+
+impl<'a> Config<'a> {
+    pub fn dimensions(mut self, value: ViewportDimensions<'a>) -> Self {
+        self.dimensions = value;
+        self
+    }
+
+    pub fn font_family(mut self, value: &'a str) -> Self {
+        self.font_family = Some(value);
+        self
+    }
+
+    pub fn font_size(mut self, value: &'a str) -> Self {
+        self.font_size = Some(value);
+        self
+    }
+
+    pub fn font_style(mut self, value: &'a str) -> Self {
+        self.font_style = Some(value);
+        self
+    }
+
+    pub fn font_weight(mut self, value: &'a str) -> Self {
+        self.font_weight = Some(value);
+        self
+    }
+
+    fn write_start_tag_to(&self, f: &mut dyn Write, unspecified_height: u32) {
+        write!(f, "<svg").unwrap();
+        match self.dimensions {
+            ViewportDimensions::Integer(width, height) => {
+                write!(f, r#" width="{}" height="{}""#, width, height).unwrap();
+            }
+            ViewportDimensions::Raw(width, height) => {
+                write!(f, r#" width="{}" height="{}""#, width, height).unwrap();
+            }
+            ViewportDimensions::OnlyWidth(width) => {
+                write!(f, r#" width="{}" height="{}""#, width, unspecified_height).unwrap();
+            }
+            ViewportDimensions::OnlyWidthRaw(width) => {
+                write!(f, r#" width="{}" height="{}""#, width, unspecified_height).unwrap();
+            }
+        }
+        if let Some(value) = self.font_family {
+            write!(f, r#" font-family="{}""#, value).unwrap();
+        }
+        if let Some(value) = self.font_size {
+            write!(f, r#" font-size="{}""#, value).unwrap();
+        }
+        if let Some(value) = self.font_style {
+            write!(f, r#" font-style="{}""#, value).unwrap();
+        }
+        if let Some(value) = self.font_weight {
+            write!(f, r#" font-weight="{}""#, value).unwrap();
+        }
+        write!(f, r#" xmlns="http://www.w3.org/2000/svg" version="1.1">"#).unwrap();
+    }
+
+    fn write_end_tag_to(&self, f: &mut dyn Write) {
+        write!(f, "</svg>").unwrap();
+    }
+}
+
+pub fn render_as_svg(tokens: alloc::vec::Vec<Token>, config: Config<'_>) -> String {
     let mut doc = String::new();
     let mut text = String::new();
-    let mut text_before: usize = 1;
-    let mut tspan_before: usize = 0;
-
-    if let Some((width, height)) = with_dimensions {
-        write!(
-            doc,
-            r#"<svg width="{}" height="{}" xmlns="http://www.w3.org/2000/svg" version="1.1">"#,
-            width, height,
-        )
-        .unwrap();
-    }
+    let mut text_before: u32 = 1;
+    let mut tspan_before: u32 = 0;
 
     for token in tokens {
         match token {
@@ -29,8 +106,8 @@ pub fn render_as_svg(
                     let span = TSpan::new()
                         .content(line)
                         .font_family("monospace")
-                        .x(Position::Absolute(0.0))
-                        .y(Position::Relative(1.2));
+                        .x(Position::Absolute(0))
+                        .y(Position::Relative(19));
                     write!(text, "{}", span).unwrap();
                 }
             }
@@ -49,7 +126,7 @@ pub fn render_as_svg(
                     x if x < 1 => "xx-large",
                     _ => unreachable!(),
                 };
-                text_before += 7_usize.saturating_sub(depth) / 4;
+                text_before += 7_u32.saturating_sub(depth as u32) / 4;
                 try_apply_text_token(
                     &mut text,
                     *text_token,
@@ -57,7 +134,7 @@ pub fn render_as_svg(
                     &mut tspan_before,
                 );
                 try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before);
-                text_before += 7_usize.saturating_sub(depth) / 4;
+                text_before += 7_u32.saturating_sub(depth as u32) / 4;
             }
             Token::ListItem {
                 place,
@@ -81,29 +158,24 @@ pub fn render_as_svg(
 
     try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before);
 
-    if with_dimensions.is_none() {
-        doc.insert_str(
-            0,
-            &format!(
-                r#"<svg width="100%" height="{}em" xmlns="http://www.w3.org/2000/svg" version="1.1">"#,
-                calculate_content_height(text_before + 1),
-            ),
-        );
-    }
-    write!(doc, "</svg>").unwrap();
+    let content_height = calculate_content_height(text_before + 1);
+    let mut tmp = String::new();
+    config.write_start_tag_to(&mut tmp, content_height);
+    doc.insert_str(0, &tmp);
+    config.write_end_tag_to(&mut doc);
 
     doc
 }
 
 #[derive(Clone, Copy)]
 enum Position {
-    Relative(f32),
-    Absolute(f32),
+    Relative(usize),
+    Absolute(usize),
 }
 
 impl Default for Position {
     fn default() -> Self {
-        Position::Relative(0.0)
+        Position::Relative(0)
     }
 }
 
@@ -176,11 +248,11 @@ impl<'a> Display for TSpan<'a> {
         write!(f, "<tspan")?;
         match self.x {
             Position::Absolute(val) => write!(f, r#" x="{}""#, val)?,
-            Position::Relative(val) => write!(f, r#" dx="{}em""#, val)?,
+            Position::Relative(val) => write!(f, r#" dx="{}""#, val)?,
         }
         match self.y {
             Position::Absolute(val) => write!(f, r#" y="{}""#, val)?,
-            Position::Relative(val) => write!(f, r#" dy="{}em""#, val)?,
+            Position::Relative(val) => write!(f, r#" dy="{}""#, val)?,
         }
         if let Some(value) = self.font_family {
             write!(f, r#" font-family="{}""#, value)?;
@@ -201,21 +273,21 @@ impl<'a> Display for TSpan<'a> {
     }
 }
 
-fn calculate_content_height(text_before: usize) -> f32 {
-    (text_before * 12) as f32 / 10_f32
+fn calculate_content_height(text_before: u32) -> u32 {
+    (text_before * 12 * 16) / 10
 }
 
 fn try_apply_text(
     doc: &mut String,
     text: &mut String,
-    text_before: &mut usize,
-    tspan_before: &mut usize,
+    text_before: &mut u32,
+    tspan_before: &mut u32,
 ) {
     if text.is_empty() {
         *text_before += 1;
     } else {
         let y = calculate_content_height(*text_before);
-        write!(doc, r#"<text x="0" y="{}em">{}</text>"#, y, text).unwrap();
+        write!(doc, r#"<text x="0" y="{}">{}</text>"#, y, text).unwrap();
         text.clear();
         *text_before += 1;
         *tspan_before = 0;
@@ -226,13 +298,9 @@ fn try_apply_text_token<'a>(
     text: &mut String,
     token: Token,
     mut span: TSpan<'a>,
-    tspan_before: &mut usize,
+    tspan_before: &mut u32,
 ) {
-    span = span.x(Position::Relative(if *tspan_before > 0 {
-        0.3
-    } else {
-        0.0
-    }));
+    span = span.x(Position::Relative(if *tspan_before > 0 { 5 } else { 0 }));
     match token {
         Token::Text {
             value,

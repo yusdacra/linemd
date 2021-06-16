@@ -1,4 +1,4 @@
-use linemd::{parse, render_as_html, render_as_svg};
+use linemd::{parse, render_as_html, render_as_svg, SvgConfig};
 use std::io::{prelude::*, stdin};
 
 const HELP_TEXT: &str = include_str!("help.txt");
@@ -32,7 +32,7 @@ fn main() {
 
         let tokens = parse(md);
         let out = if svg {
-            render_as_svg(tokens, None)
+            render_as_svg(tokens, SvgConfig::default())
         } else {
             render_as_html(tokens)
         };
