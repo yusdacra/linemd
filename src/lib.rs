@@ -24,7 +24,7 @@ pub use parser::{Parser, Token};
 
 #[cfg(feature = "svg")]
 #[doc(inline)]
-pub use svg::{render_as_svg, Config as SvgConfig};
+pub use svg::{render_as_svg, Config as SvgConfig, ViewportDimensions as SvgViewportDimensions};
 
 #[cfg(feature = "html")]
 #[doc(inline)]
