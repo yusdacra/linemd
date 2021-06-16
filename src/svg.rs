@@ -19,6 +19,7 @@ impl<'a> Default for ViewportDimensions<'a> {
     }
 }
 
+/// SVG rendering configuration for [`render_as_svg`].
 #[derive(Default, Debug)]
 pub struct Config<'a> {
     dimensions: ViewportDimensions<'a>,
@@ -29,26 +30,31 @@ pub struct Config<'a> {
 }
 
 impl<'a> Config<'a> {
+    /// Set the dimensions of the resulting SVG document.
     pub fn dimensions(mut self, value: ViewportDimensions<'a>) -> Self {
         self.dimensions = value;
         self
     }
 
+    /// Set the font family of the resulting SVG document.
     pub fn font_family(mut self, value: &'a str) -> Self {
         self.font_family = Some(value);
         self
     }
 
+    /// Set the font size of the resulting SVG document.
     pub fn font_size(mut self, value: &'a str) -> Self {
         self.font_size = Some(value);
         self
     }
 
+    /// Set the font style of the resulting SVG document.
     pub fn font_style(mut self, value: &'a str) -> Self {
         self.font_style = Some(value);
         self
     }
 
+    /// Set the font weight of the resulting SVG document.
     pub fn font_weight(mut self, value: &'a str) -> Self {
         self.font_weight = Some(value);
         self
@@ -90,6 +96,13 @@ impl<'a> Config<'a> {
     }
 }
 
+/// Renders parsed tokens (`Vec<Token>`) as SVG.
+///
+/// # Example
+/// ```
+/// # use linemd::{parse, render_as_svg};
+/// let svg = render_as_svg(parse("Some uninspiring text."));
+/// ```
 pub fn render_as_svg(tokens: alloc::vec::Vec<Token>, config: Config<'_>) -> String {
     let mut doc = String::new();
     let mut text = String::new();
