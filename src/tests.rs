@@ -286,6 +286,6 @@ fn to_html() {
 
 #[test]
 fn to_svg() {
-    let svg = render_as_svg(parse(MD));
+    let svg = render_as_svg(parse(MD), false);
     assert_eq!(svg, include_str!("../examples/all.svg"));
 }

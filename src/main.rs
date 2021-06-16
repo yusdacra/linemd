@@ -30,8 +30,13 @@ fn main() {
             }
         };
 
-        let render = if svg { render_as_svg } else { render_as_html };
-        println!("{}", render(parse(md)));
+        let tokens = parse(md);
+        let out = if svg {
+            render_as_svg(tokens, false)
+        } else {
+            render_as_html(tokens)
+        };
+        println!("{}", out);
     } else {
         println!("{}", HELP_TEXT);
     }

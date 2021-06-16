@@ -1,11 +1,19 @@
 use super::*;
 use core::fmt::{self, Display, Formatter, Write};
 
-pub fn render_as_svg(tokens: alloc::vec::Vec<Token>) -> String {
+pub fn render_as_svg(tokens: alloc::vec::Vec<Token>, without_dimensions: bool) -> String {
     let mut doc = String::new();
     let mut text = String::new();
     let mut text_before: usize = 1;
     let mut tspan_before: usize = 0;
+
+    if without_dimensions {
+        doc.insert_str(
+            0,
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1">"#,
+        );
+    }
 
     for token in tokens {
         match token {
@@ -69,13 +77,16 @@ pub fn render_as_svg(tokens: alloc::vec::Vec<Token>) -> String {
 
     try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before);
 
-    doc.insert_str(
-        0,
-        &format!(
-            r#"<svg width="100%" height="{}em">"#,
-            calculate_content_height(text_before + 1),
-        ),
-    );
+    if !without_dimensions {
+        doc.insert_str(
+            0,
+            &format!(
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="100%" height="{}em" xmlns="http://www.w3.org/2000/svg" version="1.1">"#,
+                calculate_content_height(text_before + 1),
+            ),
+        );
+    }
     write!(doc, "</svg>").unwrap();
 
     doc

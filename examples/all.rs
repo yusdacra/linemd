@@ -5,6 +5,6 @@ fn main() {
     println!("{:#?}", tokens);
     let html = linemd::render_as_html(tokens.clone());
     println!("{}", html);
-    let svg = linemd::render_as_svg(tokens);
+    let svg = linemd::render_as_svg(tokens, false);
     println!("{}", svg);
 }
