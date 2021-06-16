@@ -32,7 +32,7 @@ fn main() {
 
         let tokens = parse(md);
         let out = if svg {
-            render_as_svg(tokens, false)
+            render_as_svg(tokens, None)
         } else {
             render_as_html(tokens)
         };

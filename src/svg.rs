@@ -1,18 +1,22 @@
 use super::*;
 use core::fmt::{self, Display, Formatter, Write};
 
-pub fn render_as_svg(tokens: alloc::vec::Vec<Token>, without_dimensions: bool) -> String {
+pub fn render_as_svg(
+    tokens: alloc::vec::Vec<Token>,
+    with_dimensions: Option<(u32, u32)>,
+) -> String {
     let mut doc = String::new();
     let mut text = String::new();
     let mut text_before: usize = 1;
     let mut tspan_before: usize = 0;
 
-    if without_dimensions {
-        doc.insert_str(
-            0,
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1">"#,
-        );
+    if let Some((width, height)) = with_dimensions {
+        write!(
+            doc,
+            r#"<svg width="{}" height="{}" xmlns="http://www.w3.org/2000/svg" version="1.1">"#,
+            width, height,
+        )
+        .unwrap();
     }
 
     for token in tokens {
@@ -77,12 +81,11 @@ pub fn render_as_svg(tokens: alloc::vec::Vec<Token>, without_dimensions: bool) -
 
     try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before);
 
-    if !without_dimensions {
+    if with_dimensions.is_none() {
         doc.insert_str(
             0,
             &format!(
-                r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="100%" height="{}em" xmlns="http://www.w3.org/2000/svg" version="1.1">"#,
+                r#"<svg width="100%" height="{}em" xmlns="http://www.w3.org/2000/svg" version="1.1">"#,
                 calculate_content_height(text_before + 1),
             ),
         );
