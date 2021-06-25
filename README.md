@@ -21,7 +21,7 @@
 ```rust
 let md: String;
 
-let tokens = linemd::parse(md);
+let tokens = linemd::md.parse_md();
 // use tokens however you want
 ```
 

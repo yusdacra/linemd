@@ -1,14 +1,9 @@
-#![no_std]
+#![cfg_attr(tests, no_std)]
 //! `linemd` is a simple and opinionated markdown parsing library.
 
 extern crate alloc;
 #[cfg(any(feature = "html", feature = "svg"))]
-use alloc::format;
-use alloc::{
-    boxed::Box,
-    string::{String, ToString},
-    vec::Vec,
-};
+use alloc::{boxed::Box, string::String, vec::Vec};
 
 mod parser;
 #[cfg(test)]
@@ -29,21 +24,3 @@ pub use svg::{render_as_svg, Config as SvgConfig, ViewportDimensions as SvgViewp
 #[cfg(feature = "html")]
 #[doc(inline)]
 pub use html::render_as_html;
-
-/// Parses markdown text and returns parsed tokens.
-///
-/// # Example
-/// ```
-/// # use linemd::Token;
-/// let tokens = linemd::parse("Some uninspiring text.");
-/// // Use the tokens
-/// assert_eq!(tokens, vec![Token::Text { value: "Some uninspiring text.".to_string(), bold: false, italic: false }]);
-/// ```
-pub fn parse(md: impl AsRef<str>) -> Vec<Token> {
-    {
-        let mut parser = Parser::new();
-        parser.feed(md.as_ref());
-        parser
-    }
-    .parse()
-}

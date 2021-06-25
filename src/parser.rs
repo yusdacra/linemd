@@ -1,412 +1,285 @@
+use core::{ops::Not, slice::SliceIndex};
+
 use super::*;
 
-/// A markdown parser.
-#[derive(Debug, Clone, Default)]
-pub struct Parser {
-    input: String,
-    at: usize,
+#[derive(Debug, Clone, Copy)]
+pub enum ParserError {
+    EOF,
 }
 
-impl Parser {
-    /// Create a new and empty parser.
-    pub fn new() -> Self {
-        Self::default()
-    }
+pub type AtWith<T> = (T, usize);
+pub type AtStr<'a> = AtWith<&'a str>;
+pub type AtToken<'a> = AtWith<Token<'a>>;
 
-    /// Add the parser some input, which will be parsed on the next [`Parser::parse()`] call.
-    pub fn feed(&mut self, input: &str) {
-        self.input += input;
-    }
-
+pub trait Parser {
     /// Parse the feeded inputs and return tokens.
-    pub fn parse(&mut self) -> Vec<Token> {
+    fn parse_md(&self) -> Vec<Token<'_>> {
         let mut tokens = Vec::new();
-        let mut none_count = 0;
-
-        loop {
-            self.consume_whitespace();
-
-            if self.eol() {
-                break;
-            }
-
-            if let Some(token) = self.parse_token() {
-                tokens.push(token);
-                none_count = 0;
-            } else {
-                none_count += 1;
-            }
-
-            // Abort if we have got `None` for more than 1 times, the parser is probably stuck
-            if none_count > 1 {
-                break;
-            }
+        let mut at = 0;
+        while let Some((token, nat)) = self.parse_token(at) {
+            at = nat;
+            tokens.push(token);
         }
-
         tokens
     }
-
-    fn parse_token(&mut self) -> Option<Token> {
-        let c = self.next_char()?;
-        match c {
-            '\n' => {
-                self.consume_char();
-                Some(Token::LineBreak)
-            }
-            '#' if self
-                .after_while(|c| is_header(c) && is_not_newline(c))
-                .map_or(false, char::is_whitespace) =>
-            {
-                self.parse_header()
-            }
-            '+' | '-' | '*' if self.char_at(self.at + 1).map_or(false, char::is_whitespace) => {
-                self.parse_unordered_list()
-            }
-            '0'..='9'
-                if self
-                    .after_while(|c| c.is_numeric() && is_not_newline(c))
-                    .map_or(false, |c| c == '.') =>
-            {
-                self.parse_ordered_list()
-            }
-            '<' if self
-                .after_while(|c| c != '>' && is_not_newline(c))
-                .is_some() =>
-            {
-                self.parse_naked_url()
-            }
-            '`' if self.code_fence() => self.parse_code_fence(),
-            '`' if self.code_end() => self.parse_code(),
-            _ => self.parse_text(),
-        }
-    }
-
-    fn parse_header(&mut self) -> Option<Token> {
-        let depth = self.consume_while(is_header)?.len();
-        self.consume_whitespace();
-        let text = self.parse_text()?.into();
-        Some(Token::Header { depth, text })
-    }
-
-    fn parse_ordered_list(&mut self) -> Option<Token> {
-        let place = self.consume_while(char::is_numeric)?.parse().ok()?;
-        self.consume_char();
-        self.consume_whitespace();
-        let text = self.parse_text()?.into();
-
-        Some(Token::ListItem {
-            place: Some(place),
-            text,
-        })
-    }
-
-    fn parse_unordered_list(&mut self) -> Option<Token> {
-        self.consume_char();
-        self.consume_whitespace();
-        let text = self.parse_text()?.into();
-
-        Some(Token::ListItem { place: None, text })
-    }
-
-    fn parse_naked_url(&mut self) -> Option<Token> {
-        self.consume_char();
-        let url = self.consume_while(|c| c != '>')?;
-        self.consume_char();
-
-        Some(Token::Url {
-            is_image: false,
-            name: None,
-            url,
-        })
-    }
-
-    fn code_end(&self) -> bool {
-        let mut at = self.at + 1;
-        while let Some(c) = self.char_at(at) {
-            if c != '`' && is_not_newline(c) {
-                at += 1;
-            } else {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn code_fence(&self) -> bool {
-        let mut at = self.at;
-
-        let mut ticks_start = 0;
-
-        while let Some(c) = self.char_at(at) {
-            if c == '`' {
-                ticks_start += 1;
-                at += 1;
-            } else {
-                break;
-            }
-        }
-
-        if ticks_start != 3 {
-            return false;
-        }
-
-        while let Some(c) = self.char_at(at) {
-            if c != '`' {
-                at += 1;
-            } else {
-                break;
-            }
-        }
-
-        let mut ticks_end = 0;
-
-        while let Some(c) = self.char_at(at) {
-            if c == '`' {
-                ticks_end += 1;
-                at += 1;
-            }
-        }
-
-        if ticks_end != 3 {
-            return false;
-        }
-
-        true
-    }
-
-    fn parse_code(&mut self) -> Option<Token> {
-        self.consume_char();
-        let code = self.consume_while(|c| c != '`')?;
-        self.consume_char();
-
-        Some(Token::Code(code))
-    }
-
-    fn parse_code_fence(&mut self) -> Option<Token> {
-        self.consume_times(3);
-
-        let attrs: Vec<String> = self
-            .consume_while(is_not_newline)?
-            .split(',')
-            .filter_map(|c| {
-                if c.is_empty() {
-                    None
-                } else {
-                    Some(c.to_string())
-                }
+    fn parse_token(&self, at: usize) -> Option<AtToken<'_>> {
+        self.eof(at)
+            .not()
+            .then(|| {
+                self.consume_whitespace(at)
+                    .map(|at| {
+                        self.parse_header(at)
+                            .or_else(|| self.parse_code(at))
+                            .or_else(|| self.parse_text(at))
+                    })
+                    .flatten()
             })
-            .collect();
-
-        let code = self
-            .consume_while(|c| c != '`')?
-            .trim_matches(is_newline)
-            .to_string();
-
-        self.consume_times(3);
-        Some(Token::CodeFence { attrs, code })
+            .flatten()
     }
+    fn parse_code(&self, at: usize) -> Option<AtToken<'_>> {
+        self.consume_while(at, is_backtick)
+            .map_or_else(try_handle_err, |v| {
+                v.map(|(_, nat)| {
+                    let len = nat - at;
+                    match len {
+                        3 => self
+                            .consume_until_str(nat, "```")
+                            .map_or_else(try_handle_err, |v| {
+                                v.map(|(v, at)| {
+                                    let part_count = v.split('\n').count();
 
-    fn parse_text(&mut self) -> Option<Token> {
-        Some(if let Some((stars, (start, end))) = self.find_star_pair() {
-            self.consume_times(stars);
-            let mut text = String::with_capacity(end - start);
-            for _ in start..end {
-                text.push(self.consume_char()?);
-            }
-            self.consume_times(stars);
-            Token::Text {
-                value: text,
-                italic: stars != 2,
-                bold: stars != 1,
-            }
-        } else {
-            let mut result = String::new();
-            loop {
-                if !self.eol() {
-                    let ch = self.next_char()?;
-                    if is_not_newline(ch)
-                        && ch != '<'
-                        && (ch != '`' || !self.code_end())
-                        && self.find_star_pair().is_none()
-                    {
-                        result.push(self.consume_char()?);
-                    } else {
-                        break;
+                                    let token = if part_count > 1 {
+                                        let mut split = v.split('\n');
+                                        let attrs_raw = split.next().unwrap();
+                                        let attrs = attrs_raw
+                                            .split(',')
+                                            .flat_map(|s| s.is_empty().not().then(|| s))
+                                            .collect();
+                                        let code = v.trim_start_matches(attrs_raw);
+                                        Token::CodeFence { code, attrs }
+                                    } else {
+                                        Token::CodeFence {
+                                            code: v,
+                                            attrs: Vec::new(),
+                                        }
+                                    };
+
+                                    Some((token, at + 3))
+                                })
+                                .flatten()
+                            }),
+                        1 => self
+                            .consume_while(nat, |c| is_backtick(c).not())
+                            .map_or_else(try_handle_err, |v| {
+                                v.map(|(v, at)| (Token::Code(v), at + 1))
+                            }),
+                        _ => None,
                     }
-                } else {
-                    break;
-                }
+                })
+                .flatten()
+            })
+    }
+    fn parse_header(&self, at: usize) -> Option<AtToken<'_>> {
+        self.consume_while(at, is_header)
+            .map_or_else(try_handle_err, |v| {
+                v.map(|(_, nat)| {
+                    let h = nat - at;
+                    if h > 0 {
+                        let (content, nnat) = self.parse_token(nat)?;
+                        Some((
+                            Token::Header {
+                                depth: h.max(1).min(6),
+                                text: content.into(),
+                            },
+                            nnat,
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+            })
+    }
+    fn parse_text(&self, at: usize) -> Option<AtToken<'_>> {
+        handle_text_consume(self.consume_while(at, is_not_newline))
+    }
+    fn consume_whitespace(&self, at: usize) -> Option<usize> {
+        self.consume_while(at, char::is_whitespace)
+            .map_or_else(
+                |(err, maybe_info)| match err {
+                    ParserError::EOF => maybe_info.map(|info| info.1),
+                },
+                |d| d.map(|d| d.1),
+            )
+            .or(Some(at))
+    }
+    fn consume_while<F: Fn(char) -> bool>(
+        &self,
+        mut at: usize,
+        f: F,
+    ) -> Result<Option<AtStr>, (ParserError, Option<AtStr>)> {
+        let old_at = at;
+        loop {
+            let (ch, nat) = self.consume_char(at).map_err(|err| {
+                (err, {
+                    let content = self.get_range_str(old_at..at);
+                    content.is_empty().not().then(|| (content, at))
+                })
+            })?;
+            if f(ch).not() {
+                let content = self.get_range_str(old_at..at);
+                return Ok(content.is_empty().not().then(|| (content, at)));
             }
-            Token::Text {
-                value: result,
-                bold: false,
-                italic: false,
+            at = nat;
+        }
+    }
+    fn consume_until_str(
+        &self,
+        mut at: usize,
+        s: &str,
+    ) -> Result<Option<AtStr>, (ParserError, Option<AtStr>)> {
+        let old_at = at;
+        loop {
+            let (_, nat) = self.consume_char(at).map_err(|err| {
+                (err, {
+                    let content = self.get_range_str(old_at..at);
+                    content.is_empty().not().then(|| (content, at))
+                })
+            })?;
+            if self.get_range_str(at..).starts_with(s) {
+                let content = self.get_range_str(old_at..at);
+                return Ok(content.is_empty().not().then(|| (content, at)));
             }
-        })
-    }
-
-    fn find_star_pair(&self) -> Option<(usize, (usize, usize))> {
-        let mut at = self.at;
-
-        let range_start;
-        let range_end;
-
-        let mut stars_start = 0;
-
-        while let Some(c) = self.char_at(at) {
-            if is_not_newline(c) {
-                if c == '*' {
-                    stars_start += 1;
-                } else {
-                    break;
-                }
-                at += 1;
-            } else {
-                return None;
-            }
-        }
-
-        if stars_start == 0 {
-            return None;
-        }
-
-        range_start = at;
-        while let Some(c) = self.char_at(at) {
-            if is_not_newline(c) {
-                if c == '*' {
-                    break;
-                }
-                at += 1;
-            } else {
-                return None;
-            }
-        }
-        range_end = at;
-
-        let mut stars_end = 0;
-
-        while let Some(c) = self.char_at(at) {
-            if is_not_newline(c) {
-                if c == '*' {
-                    stars_end += 1;
-                } else {
-                    break;
-                }
-                at += 1;
-            }
-        }
-
-        if stars_end == 0 {
-            return None;
-        }
-
-        let stars: usize = stars_end.min(stars_start);
-
-        if stars > 3 {
-            None
-        } else {
-            let start_cut: usize = stars_start.saturating_sub(stars);
-            let end_cut: usize = stars_end.saturating_sub(stars);
-
-            Some((
-                stars,
-                (range_start + end_cut, range_end + start_cut + end_cut),
-            ))
+            at = nat;
         }
     }
+    #[inline(always)]
+    fn eof(&self, at: usize) -> bool {
+        self.next_char(at).is_err()
+    }
+    #[inline(always)]
+    fn consume_char(&self, at: usize) -> Result<(char, usize), ParserError> {
+        self.next_char(at).map(|c| (c, at + char_bytes(c)))
+    }
+    fn get_range_str<S: SliceIndex<str>>(&self, range: S) -> &S::Output;
+    fn next_char(&self, at: usize) -> Result<char, ParserError>;
+}
 
-    fn after_while<F: Fn(char) -> bool>(&self, cond: F) -> Option<char> {
-        let mut at = self.at;
-        while let Some(c) = self.char_at(at) {
-            if cond(c) {
-                at += 1;
-            } else {
-                return Some(c);
-            }
-        }
-        None
+impl<'a> Parser for &'a str {
+    #[inline(always)]
+    fn next_char(&self, at: usize) -> Result<char, ParserError> {
+        self.chars().nth(at).ok_or(ParserError::EOF)
     }
 
-    fn next_char(&self) -> Option<char> {
-        self.char_at(self.at)
-    }
-
-    fn char_at(&self, n: usize) -> Option<char> {
-        self.input.chars().nth(n)
-    }
-
-    fn eol(&self) -> bool {
-        self.at >= self.input.len()
-    }
-
-    fn consume_char(&mut self) -> Option<char> {
-        let ch = self.next_char();
-        self.at += 1;
-        ch
-    }
-
-    fn consume_times(&mut self, times: usize) -> Option<String> {
-        let mut result = String::new();
-        for _ in 0..times {
-            result.push(self.consume_char()?);
-        }
-        Some(result)
-    }
-
-    fn consume_while<F: Fn(char) -> bool>(&mut self, cond: F) -> Option<String> {
-        let mut result = String::new();
-        while !self.eol() && cond(self.next_char()?) {
-            result.push(self.consume_char()?);
-        }
-        Some(result)
-    }
-
-    fn consume_whitespace(&mut self) {
-        self.consume_while(|c| is_not_newline(c) && c.is_whitespace());
+    #[inline(always)]
+    fn get_range_str<S: SliceIndex<str>>(&self, range: S) -> &S::Output {
+        &self[range]
     }
 }
 
-fn is_newline(c: char) -> bool {
+impl Parser for String {
+    #[inline(always)]
+    fn next_char(&self, at: usize) -> Result<char, ParserError> {
+        self.chars().nth(at).ok_or(ParserError::EOF)
+    }
+
+    #[inline(always)]
+    fn get_range_str<S: SliceIndex<str>>(&self, range: S) -> &S::Output {
+        &self.as_str()[range]
+    }
+}
+
+#[inline(always)]
+fn handle_text_consume<'a>(
+    d: Result<Option<AtStr<'a>>, (ParserError, Option<AtStr<'a>>)>,
+) -> Option<AtToken<'a>> {
+    d.map_or_else(try_handle_err, |v| {
+        v.map(|(s, at)| {
+            (
+                Token::Text {
+                    value: s,
+                    bold: false,
+                    italic: false,
+                },
+                at,
+            )
+        })
+    })
+}
+
+#[inline(always)]
+fn try_handle_err(err: (ParserError, Option<AtStr<'_>>)) -> Option<AtToken<'_>> {
+    let (err, maybe_info) = err;
+    match err {
+        ParserError::EOF => maybe_info.map(|(s, at)| {
+            (
+                Token::Text {
+                    value: s,
+                    bold: false,
+                    italic: false,
+                },
+                at,
+            )
+        }),
+    }
+}
+
+#[inline(always)]
+fn char_bytes(c: char) -> usize {
+    let mut temp = [0_u8; 4];
+    let temp = c.encode_utf8(&mut temp);
+    temp.len()
+}
+
+#[inline(always)]
+const fn is_newline(c: char) -> bool {
     c == '\n'
 }
 
-fn is_not_newline(c: char) -> bool {
+#[inline(always)]
+const fn is_not_newline(c: char) -> bool {
     !is_newline(c)
 }
 
-fn is_header(c: char) -> bool {
+#[inline(always)]
+const fn is_header(c: char) -> bool {
     c == '#'
+}
+
+#[inline(always)]
+const fn is_backtick(c: char) -> bool {
+    c == '`'
 }
 
 /// A token from some parsed text.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Token {
+pub enum Token<'a> {
     /// Some text.
     Text {
-        value: String,
+        value: &'a str,
         bold: bool,
         italic: bool,
     },
     /// An URL.
     Url {
         /// Name of this URL (ie. the text in `[]`, if it exists).
-        name: Option<Box<Token>>,
-        /// Actual URL. Note that this does not get checkec to see if it's a valid URL or not.
-        url: String,
+        name: Option<Box<Token<'a>>>,
+        /// Actual URL. Note that this does not get checked to see if it's a valid URL or not.
+        url: &'a str,
         is_image: bool,
     },
     /// A header.
-    Header { depth: usize, text: Box<Token> },
+    Header { depth: usize, text: Box<Token<'a>> },
     /// A list item, which can be ordered or unordered.
     ListItem {
         /// If `None`, then it is an unordered item.
         place: Option<usize>,
-        text: Box<Token>,
+        text: Box<Token<'a>>,
     },
     /// Some code.
-    Code(String),
+    Code(&'a str),
     /// A code fence. (\`\`\`)
-    CodeFence { code: String, attrs: Vec<String> },
+    CodeFence { code: &'a str, attrs: Vec<&'a str> },
     /// A line break.
     LineBreak,
 }
