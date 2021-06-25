@@ -100,8 +100,8 @@ impl<'a> Config<'a> {
 ///
 /// # Example
 /// ```
-/// # use linemd::{parse, render_as_svg};
-/// let svg = render_as_svg(parse("Some uninspiring text."));
+/// # use linemd::{parse, render_as_svg, SvgConfig};
+/// let svg = render_as_svg(parse("Some uninspiring text."), SvgConfig::default());
 /// ```
 pub fn render_as_svg(tokens: alloc::vec::Vec<Token>, config: Config<'_>) -> String {
     let mut doc = String::new();

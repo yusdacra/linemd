@@ -21,55 +21,64 @@ impl Parser {
     /// Parse the feeded inputs and return tokens.
     pub fn parse(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
+        let mut none_count = 0;
 
-        while let Some(token) = self.parse_token() {
-            tokens.push(token);
+        loop {
+            self.consume_whitespace();
+
+            if self.eol() {
+                break;
+            }
+
+            if let Some(token) = self.parse_token() {
+                tokens.push(token);
+                none_count = 0;
+            } else {
+                none_count += 1;
+            }
+
+            // Abort if we have got `None` for more than 1 times, the parser is probably stuck
+            if none_count > 1 {
+                break;
+            }
         }
 
         tokens
     }
 
     fn parse_token(&mut self) -> Option<Token> {
-        self.consume_whitespace();
-
-        if self.eol() {
-            return None;
-        }
-
         let c = self.next_char()?;
-        let token = match c {
+        match c {
             '\n' => {
                 self.consume_char();
-                Token::LineBreak
+                Some(Token::LineBreak)
             }
             '#' if self
                 .after_while(|c| is_header(c) && is_not_newline(c))
                 .map_or(false, char::is_whitespace) =>
             {
-                self.parse_header()?
+                self.parse_header()
             }
             '+' | '-' | '*' if self.char_at(self.at + 1).map_or(false, char::is_whitespace) => {
-                self.parse_unordered_list()?
+                self.parse_unordered_list()
             }
             '0'..='9'
                 if self
                     .after_while(|c| c.is_numeric() && is_not_newline(c))
                     .map_or(false, |c| c == '.') =>
             {
-                self.parse_ordered_list()?
+                self.parse_ordered_list()
             }
             '<' if self
                 .after_while(|c| c != '>' && is_not_newline(c))
                 .is_some() =>
             {
-                self.parse_naked_url()?
+                self.parse_naked_url()
             }
-            '`' if self.code_fence() => self.parse_code_fence()?,
-            '`' if self.code_end() => self.parse_code()?,
-            _ => self.parse_text()?,
-        };
-
-        Some(token)
+            '`' if self.code_fence() => self.parse_code_fence(),
+            '`' if self.code_end() => self.parse_code(),
+            _ => self.parse_text(),
+        }
     }
 
     fn parse_header(&mut self) -> Option<Token> {
