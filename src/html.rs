@@ -5,7 +5,7 @@ use core::fmt::{self, Write};
 ///
 /// # Example
 /// ```
-/// # use linemd::{parse, render_as_html};
+/// # use linemd::{render_as_html, Parser};
 /// let html = render_as_html("Some uninspiring text.".parse_md());
 /// ```
 pub fn render_as_html<'a>(tokens: impl AsRef<[Token<'a>]> + 'a) -> String {

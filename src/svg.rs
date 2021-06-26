@@ -100,7 +100,7 @@ impl<'a> Config<'a> {
 ///
 /// # Example
 /// ```
-/// # use linemd::{parse, render_as_svg, SvgConfig};
+/// # use linemd::{render_as_svg, SvgConfig, Parser};
 /// let svg = render_as_svg("Some uninspiring text.".parse_md(), SvgConfig::default());
 /// ```
 pub fn render_as_svg<'a>(tokens: impl AsRef<[Token<'a>]> + 'a, config: Config<'_>) -> String {

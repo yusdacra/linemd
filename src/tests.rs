@@ -28,18 +28,8 @@ fn naked_url() {
 #[test]
 fn code() {
     assert_eq!("`coding`".parse_md(), vec![Token::Code("coding"),]);
-    assert_eq!(
-        "`coding``".parse_md(),
-        vec![
-            Token::Code("coding"),
-            Token::Text {
-                value: "`",
-                bold: false,
-                italic: false,
-            }
-        ]
-    );
-    assert_eq!("````".parse_md(), vec![Token::Code(""), Token::Code("")]);
+    assert_eq!("`coding``".parse_md(), vec![Token::Code("coding"),]);
+    assert_eq!("````".parse_md(), vec![]);
 }
 
 #[test]
@@ -69,18 +59,6 @@ fn code_fence() {
 
 #[test]
 fn bold_or_italic_text() {
-    fn text_t(v: impl AsRef<str>, bold: bool, italic: bool) {
-        let v = v.as_ref();
-        assert_eq!(
-            v.parse_md(),
-            vec![Token::Text {
-                value: v,
-                bold,
-                italic,
-            },],
-        );
-    }
-
     fn text_test(parsed: Vec<Token>, bold: bool, italic: bool) {
         assert_eq!(
             parsed,
@@ -115,39 +93,20 @@ fn bold_or_italic_text() {
     );
     assert_eq!(
         "**ada***".parse_md(),
-        vec![
-            Token::Text {
-                value: "ada",
-                bold: true,
-                italic: false,
-            },
-            Token::Text {
-                value: "*",
-                bold: false,
-                italic: false,
-            }
-        ],
+        vec![Token::Text {
+            value: "ada",
+            bold: true,
+            italic: false,
+        }],
     );
     assert_eq!(
         "*ada**".parse_md(),
-        vec![
-            Token::Text {
-                value: "ada",
-                italic: true,
-                bold: false,
-            },
-            Token::Text {
-                value: "*",
-                bold: false,
-                italic: false,
-            }
-        ],
+        vec![Token::Text {
+            value: "ada",
+            italic: true,
+            bold: false,
+        }],
     );
-
-    for i in 1..12 {
-        let t = (0..i).map(|_| '*').collect::<String>();
-        text_t(t, false, false);
-    }
 
     assert_eq!(
         "**g** *g*".parse_md(),
@@ -226,26 +185,31 @@ fn header() {
     );
 }
 
+fn ordered_test(parsed: Vec<Token>, place: usize) {
+    assert_eq!(
+        parsed,
+        vec![Token::ListItem {
+            place: Some(place),
+            text: Token::Text {
+                value: "ada",
+                italic: false,
+                bold: false,
+            }
+            .into(),
+        }]
+    );
+}
+
 #[test]
 fn ordered_lists() {
-    fn ordered_test(parsed: Vec<Token>, place: usize) {
-        assert_eq!(
-            parsed,
-            vec![Token::ListItem {
-                place: Some(place),
-                text: Token::Text {
-                    value: "ada",
-                    italic: false,
-                    bold: false,
-                }
-                .into(),
-            }]
-        );
-    }
-
     for place in 0..=100 {
         ordered_test(format!("{}. ada", place).parse_md(), place);
     }
+}
+
+#[test]
+#[should_panic]
+fn ordered_list_wrong() {
     for place in 0..=100 {
         ordered_test(format!("{}.ada", place).parse_md(), place);
     }
@@ -300,7 +264,7 @@ fn html_paragraph_two_newline() {
 #[test]
 fn html_paragraph_newline_paragraph() {
     assert_eq!(
-        &render_as_html("asdfadsfas\nasdfasd".parse_md()),
+        &render_as_html(dbg!("asdfadsfas\nasdfasd".parse_md())),
         "<p>asdfadsfas \nasdfasd </p>"
     )
 }
@@ -314,14 +278,52 @@ fn html_paragraph_two_newline_paragraph() {
 }
 
 #[test]
-fn invalid_md() {
-    const INVALID_MD: &str = include_str!("../examples/invalid.md");
-    assert_eq!(INVALID_MD.parse_md(), vec![])
+fn weird_md() {
+    const WEIRD_MD: &str = include_str!("../examples/weird.md");
+    let output = vec![
+        Token::Text {
+            value: "asdf ",
+            bold: false,
+            italic: false,
+        },
+        Token::Code("asdfasdf"),
+        Token::LineBreak,
+        Token::LineBreak,
+        Token::CodeFence {
+            code:
+                "asdfasdf\n\n\n\n# asdfasdf\n\n!!! ** ** *11*   *\n\n\\\\1***13\n\n##!\n\n``\n`\n\n",
+            attrs: vec![],
+        },
+        Token::LineBreak,
+        Token::LineBreak,
+        Token::Text {
+            value: "123123",
+            bold: false,
+            italic: false,
+        },
+        Token::LineBreak,
+    ];
+    assert_eq!(WEIRD_MD.parse_md(), output)
 }
 
 #[test]
-fn aaaaaaaaa() {
-    assert_eq!("asdfadsf `asdf`".parse_md(), vec![])
+fn text_seperating() {
+    assert_eq!(
+        "asdfadsf `asdf` <example>".parse_md(),
+        vec![
+            Token::Text {
+                value: "asdfadsf ",
+                bold: false,
+                italic: false
+            },
+            Token::Code("asdf"),
+            Token::Url {
+                name: None,
+                url: "example",
+                is_image: false
+            }
+        ]
+    )
 }
 
 const MD: &str = include_str!("../examples/all.md");
