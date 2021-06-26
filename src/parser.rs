@@ -123,7 +123,7 @@ pub trait Parser {
             .flatten()
     }
     fn parse_header(&self, at: usize) -> Option<AtToken<'_>> {
-        self.consume_while(at, is_header)
+        self.consume_while(at, |c| c == '#')
             .ok()
             .flatten()
             .map(|(_, hnat)| {
@@ -266,11 +266,11 @@ pub trait Parser {
     fn parse_line_break(&self, at: usize) -> Option<AtToken<'_>> {
         self.consume_char(at)
             .ok()
-            .map(|(c, nat)| is_newline(c).then(|| (Token::LineBreak, nat)))
+            .map(|(c, nat)| (c == '\n').then(|| (Token::LineBreak, nat)))
             .flatten()
     }
     fn consume_whitespace(&self, at: usize) -> Option<AtStr<'_>> {
-        self.consume_while(at, |c| is_not_newline(c) && c.is_whitespace())
+        self.consume_while(at, |c| c != '\n' && c.is_whitespace())
             .unwrap_or_else(|(err, maybe_info)| match err {
                 ParserError::EOF => maybe_info,
             })
@@ -369,21 +369,6 @@ fn char_bytes(c: char) -> usize {
     let mut temp = [0_u8; 4];
     let temp = c.encode_utf8(&mut temp);
     temp.len()
-}
-
-#[inline(always)]
-const fn is_newline(c: char) -> bool {
-    c == '\n'
-}
-
-#[inline(always)]
-const fn is_not_newline(c: char) -> bool {
-    !is_newline(c)
-}
-
-#[inline(always)]
-const fn is_header(c: char) -> bool {
-    c == '#'
 }
 
 #[inline(always)]
