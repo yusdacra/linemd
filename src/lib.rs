@@ -3,19 +3,22 @@
 
 extern crate alloc;
 #[cfg(any(feature = "html", feature = "svg"))]
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::string::String;
 
-mod parser;
+/// Parser types used to parse markdown.
+pub mod parser;
 #[cfg(test)]
 mod tests;
 
+/// HTML rendering of tokens.
 #[cfg(feature = "html")]
-mod html;
+pub mod html;
+/// SVG rendering of tokens.
 #[cfg(feature = "svg")]
-mod svg;
+pub mod svg;
 
 #[doc(inline)]
-pub use parser::{Parser, Token};
+pub use parser::Parser;
 
 #[cfg(feature = "svg")]
 #[doc(inline)]

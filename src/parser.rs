@@ -1,22 +1,37 @@
 use core::{ops::Not, slice::SliceIndex};
 
-use super::*;
-
+/// Errors that can occur while parsing.
 #[derive(Debug, Clone, Copy)]
 pub enum ParserError {
+    /// Signals that EOF is reached.
     EOF,
 }
 
+/// Convenience type alias that is a tuple of some type and an index.
 pub type AtWith<T> = (T, usize);
+
+/// Convenience type alias that is a tuple of a str and an index.
 pub type AtStr<'a> = AtWith<&'a str>;
+
+/// Convenience type alias that is a tuple of a token and an index.
 pub type AtToken<'a> = AtWith<Token<'a>>;
 
+/// Convenience type alias that is a tuple of a text and an index.
+pub type AtText<'a> = AtWith<Text<'a>>;
+
+/// The core of this crate. This trait implements markdown parsing, and several utilities.
+///
+/// Implementing this trait for your own types is very easy, the onyl required methods are `next_char`
+/// and `get_range_str`. You can also provide implementations for other methods if you can include a
+/// more optimized way for your types.
 pub trait Parser {
+    /// Parses self for tokens.
     fn parse_md(&self) -> Vec<Token<'_>> {
         let mut tokens = Vec::new();
         self.parse_md_with_buf(&mut tokens);
         tokens
     }
+    /// Parses self for tokens, and outputs to a buffer.
     fn parse_md_with_buf<'a>(&'a self, buf: &mut Vec<Token<'a>>) {
         let mut at = 0;
         while let Some((token, nat)) = self.parse_token(at) {
@@ -39,6 +54,12 @@ pub trait Parser {
             })
             .flatten()
     }
+    #[inline(always)]
+    fn parse_texty(&self, at: usize) -> Option<AtToken<'_>> {
+        self.parse_code(at)
+            .or_else(|| self.parse_inline_url(at))
+            .or_else(|| self.parse_text(at).map(|(t, at)| (t.into_token(), at)))
+    }
     fn parse_code(&self, at: usize) -> Option<AtToken<'_>> {
         self.consume_while(at, is_backtick)
             .ok()
@@ -57,7 +78,16 @@ pub trait Parser {
         self.consume_while(at, |c| is_backtick(c).not())
             .ok()
             .flatten()
-            .map(|(v, at)| (Token::Code(v), at + 1))
+            .map(|(value, at)| {
+                (
+                    Token::Text(Text {
+                        value,
+                        code: true,
+                        ..Default::default()
+                    }),
+                    at + 1,
+                )
+            })
     }
     fn parse_list_item(&self, at: usize) -> Option<AtToken<'_>> {
         self.consume_while(at, |c| c.is_numeric() || matches!(c, '-' | '+' | '*'))
@@ -74,20 +104,7 @@ pub trait Parser {
                             .unwrap_or((None, nat));
                         self.consume_whitespace(nat)
                             .map(|(w, wnat)| {
-                                w.is_empty()
-                                    .not()
-                                    .then(|| {
-                                        self.parse_texty(wnat).map(|(t, nat)| {
-                                            (
-                                                Token::ListItem {
-                                                    place,
-                                                    text: t.into(),
-                                                },
-                                                nat,
-                                            )
-                                        })
-                                    })
-                                    .flatten()
+                                w.is_empty().not().then(|| (Token::ListItem(place), wnat))
                             })
                             .flatten()
                     })
@@ -105,16 +122,15 @@ pub trait Parser {
                 let token = if part_count >= 1 {
                     let mut split = v.split('\n');
                     let attrs_raw = split.next().unwrap();
-                    let attrs = attrs_raw
-                        .split(',')
-                        .flat_map(|s| s.is_empty().not().then(|| s))
-                        .collect();
                     let code = v.trim_start_matches(attrs_raw).trim_start_matches('\n');
-                    Token::CodeFence { code, attrs }
+                    Token::CodeFence {
+                        code,
+                        attrs: attrs_raw,
+                    }
                 } else {
                     Token::CodeFence {
                         code: v.trim_start_matches('\n'),
-                        attrs: Vec::new(),
+                        attrs: "",
                     }
                 };
 
@@ -133,31 +149,13 @@ pub trait Parser {
                             .not()
                             .then(|| {
                                 let h = hnat - at;
-                                if h > 0 {
-                                    let (content, nat) = self.parse_texty(nat)?;
-                                    Some((
-                                        Token::Header {
-                                            depth: h.max(1).min(6),
-                                            text: content.into(),
-                                        },
-                                        nat,
-                                    ))
-                                } else {
-                                    None
-                                }
+                                (h > 0).then(|| (Token::Header(h.max(1).min(6)), nat))
                             })
                             .flatten()
                     })
                     .flatten()
             })
             .flatten()
-    }
-    #[inline(always)]
-    fn parse_texty(&self, at: usize) -> Option<AtToken<'_>> {
-        self.parse_code(at)
-            .or_else(|| self.parse_inline_url(at))
-            .or_else(|| self.parse_italic_bold_text(at))
-            .or_else(|| self.parse_text(at))
     }
     fn parse_inline_url(&self, at: usize) -> Option<AtToken<'_>> {
         self.consume_while(at, |c| c == '<')
@@ -180,7 +178,7 @@ pub trait Parser {
             })
             .flatten()
     }
-    fn parse_italic_bold_text(&self, at: usize) -> Option<AtToken<'_>> {
+    fn parse_text(&self, at: usize) -> Option<AtText<'_>> {
         self.consume_while(at, |c| c == '*')
             .ok()
             .flatten()
@@ -196,12 +194,13 @@ pub trait Parser {
                             .flatten()
                             .map(|(s, nnat)| {
                                 (
-                                    Token::Text {
+                                    Text {
                                         value: check_italic
                                             .then(|| self.get_range_str(nat - 1..nnat))
                                             .unwrap_or(s),
                                         bold: search != 1,
                                         italic: search != 2,
+                                        code: false,
                                     },
                                     nnat + search,
                                 )
@@ -210,20 +209,9 @@ pub trait Parser {
                     .next()
             })
             .flatten()
-    }
-    fn parse_text(&self, at: usize) -> Option<AtToken<'_>> {
-        self.consume_while(at, |c| matches!(c, '\n' | '<' | '`' | '*').not())
-            .map_or_else(try_handle_err, |v| {
-                v.map(|(s, nat)| {
-                    (
-                        Token::Text {
-                            value: s,
-                            bold: false,
-                            italic: false,
-                        },
-                        nat,
-                    )
-                })
+            .or_else(|| {
+                self.consume_while(at, |c| matches!(c, '\n' | '<' | '`' | '*').not())
+                    .map_or_else(try_handle_err, |v| v.map(|(s, nat)| (Text::naked(s), nat)))
             })
     }
     fn parse_line_break(&self, at: usize) -> Option<AtToken<'_>> {
@@ -239,6 +227,7 @@ pub trait Parser {
             })
             .or(Some(("", at)))
     }
+    #[inline(always)]
     fn consume_while<F: Fn(char) -> bool>(
         &self,
         at: usize,
@@ -246,7 +235,6 @@ pub trait Parser {
     ) -> Result<Option<AtStr>, (ParserError, Option<AtStr>)> {
         self.consume_until(at, |c, _, _| f(c).not())
     }
-    #[inline(always)]
     fn consume_until<F: Fn(char, usize, usize) -> bool>(
         &self,
         mut at: usize,
@@ -267,6 +255,7 @@ pub trait Parser {
             at = nat;
         }
     }
+    #[inline(always)]
     fn consume_until_str(
         &self,
         at: usize,
@@ -311,19 +300,10 @@ impl Parser for String {
 }
 
 #[inline(always)]
-fn try_handle_err(err: (ParserError, Option<AtStr<'_>>)) -> Option<AtToken<'_>> {
+fn try_handle_err(err: (ParserError, Option<AtStr<'_>>)) -> Option<AtText<'_>> {
     let (err, maybe_info) = err;
     match err {
-        ParserError::EOF => maybe_info.map(|(s, at)| {
-            (
-                Token::Text {
-                    value: s,
-                    bold: false,
-                    italic: false,
-                },
-                at,
-            )
-        }),
+        ParserError::EOF => maybe_info.map(|(s, at)| (Text::naked(s), at)),
     }
 }
 
@@ -343,31 +323,62 @@ const fn is_backtick(c: char) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Token<'a> {
     /// Some text.
-    Text {
-        value: &'a str,
-        bold: bool,
-        italic: bool,
-    },
+    Text(Text<'a>),
     /// An URL.
     Url {
         /// Name of this URL (ie. the text in `[]`, if it exists).
-        name: Option<Box<Token<'a>>>,
+        name: Option<Text<'a>>,
         /// Actual URL. Note that this does not get checked to see if it's a valid URL or not.
         url: &'a str,
         is_image: bool,
     },
     /// A header.
-    Header { depth: usize, text: Box<Token<'a>> },
+    Header(usize),
     /// A list item, which can be ordered or unordered.
-    ListItem {
-        /// If `None`, then it is an unordered item.
-        place: Option<usize>,
-        text: Box<Token<'a>>,
-    },
-    /// Some code.
-    Code(&'a str),
+    /// If `None`, then it is an unordered item.
+    ListItem(Option<usize>),
     /// A code fence. (\`\`\`)
-    CodeFence { code: &'a str, attrs: Vec<&'a str> },
+    CodeFence { code: &'a str, attrs: &'a str },
     /// A line break.
     LineBreak,
+}
+
+/// Some text.
+#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Text<'a> {
+    /// The actual underlying string value.
+    pub value: &'a str,
+    /// `true` if this text is bold.
+    pub bold: bool,
+    /// `true` if this text is italic.
+    pub italic: bool,
+    /// `true` if this text is code.
+    pub code: bool,
+}
+
+impl<'a> Text<'a> {
+    /// Create a code text.
+    pub const fn code(value: &'a str) -> Self {
+        Self {
+            value,
+            code: true,
+            italic: false,
+            bold: false,
+        }
+    }
+
+    /// Create a "naked" text, ie. not italic, bold or code.
+    pub const fn naked(value: &'a str) -> Self {
+        Self {
+            value,
+            code: false,
+            italic: false,
+            bold: false,
+        }
+    }
+
+    /// Convert this text into a token.
+    pub const fn into_token(self) -> Token<'a> {
+        Token::Text(self)
+    }
 }

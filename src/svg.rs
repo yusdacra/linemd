@@ -1,3 +1,5 @@
+use crate::parser::{Text, Token};
+
 use super::*;
 use core::fmt::{self, Display, Formatter, Write};
 
@@ -31,31 +33,31 @@ pub struct Config<'a> {
 
 impl<'a> Config<'a> {
     /// Set the dimensions of the resulting SVG document.
-    pub fn dimensions(mut self, value: ViewportDimensions<'a>) -> Self {
+    pub const fn dimensions(mut self, value: ViewportDimensions<'a>) -> Self {
         self.dimensions = value;
         self
     }
 
     /// Set the font family of the resulting SVG document.
-    pub fn font_family(mut self, value: &'a str) -> Self {
+    pub const fn font_family(mut self, value: &'a str) -> Self {
         self.font_family = Some(value);
         self
     }
 
     /// Set the font size of the resulting SVG document.
-    pub fn font_size(mut self, value: &'a str) -> Self {
+    pub const fn font_size(mut self, value: &'a str) -> Self {
         self.font_size = Some(value);
         self
     }
 
     /// Set the font style of the resulting SVG document.
-    pub fn font_style(mut self, value: &'a str) -> Self {
+    pub const fn font_style(mut self, value: &'a str) -> Self {
         self.font_style = Some(value);
         self
     }
 
     /// Set the font weight of the resulting SVG document.
-    pub fn font_weight(mut self, value: &'a str) -> Self {
+    pub const fn font_weight(mut self, value: &'a str) -> Self {
         self.font_weight = Some(value);
         self
     }
@@ -96,7 +98,7 @@ impl<'a> Config<'a> {
     }
 }
 
-/// Renders parsed tokens (`Vec<Token>`) as SVG.
+/// Renders parsed tokens as SVG.
 ///
 /// # Example
 /// ```
@@ -105,14 +107,39 @@ impl<'a> Config<'a> {
 /// ```
 pub fn render_as_svg<'a>(tokens: impl AsRef<[Token<'a>]> + 'a, config: Config<'_>) -> String {
     let mut doc = String::new();
+    render_to_buffer(tokens, config, &mut doc);
+    doc
+}
+
+/// Renders parsed tokens as SVG, to a buffer.
+///
+/// # Example
+/// ```
+/// # use linemd::{svg, SvgConfig, Parser};
+/// let mut buffer = String::new();
+/// let svg = svg::render_to_buffer("Some uninspiring text.".parse_md(), SvgConfig::default(), &mut buffer);
+/// ```
+pub fn render_to_buffer<'a>(
+    tokens: impl AsRef<[Token<'a>]> + 'a,
+    config: Config<'_>,
+    doc: &mut String,
+) {
     let mut text = String::new();
     let mut text_before: u32 = 1;
     let mut tspan_before: u32 = 0;
 
-    for token in tokens.as_ref() {
+    let mut at = 0;
+    let tokens = tokens.as_ref();
+    let mut was_header = None;
+
+    while at < tokens.len() {
+        let token = &tokens[at];
         match token {
             Token::LineBreak => {
-                try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before)
+                try_apply_text(doc, &mut text, &mut text_before, &mut tspan_before);
+                if let Some(depth) = was_header {
+                    text_before += 7_u32.saturating_sub(depth as u32) / 4;
+                }
             }
             Token::CodeFence { code, attrs: _ } => {
                 for line in code.lines() {
@@ -124,10 +151,7 @@ pub fn render_as_svg<'a>(tokens: impl AsRef<[Token<'a>]> + 'a, config: Config<'_
                     write!(text, "{}", span).unwrap();
                 }
             }
-            Token::Header {
-                depth,
-                text: text_token,
-            } => {
+            Token::Header(depth) => {
                 let size = match *depth {
                     1 => "xx-large",
                     2 => "x-large",
@@ -140,52 +164,82 @@ pub fn render_as_svg<'a>(tokens: impl AsRef<[Token<'a>]> + 'a, config: Config<'_
                     _ => unreachable!(),
                 };
                 text_before += 7_u32.saturating_sub(*depth as u32) / 4;
-                try_apply_text_token(
+                at += 1;
+                at = write_until_line_break(
                     &mut text,
-                    &text_token,
                     TSpan::<0>::new().font_size(size),
                     &mut tspan_before,
+                    at,
+                    tokens,
                 );
-                try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before);
-                text_before += 7_u32.saturating_sub(*depth as u32) / 4;
+                was_header = Some(*depth);
+                continue;
             }
-            Token::ListItem {
-                place,
-                text: text_token,
-            } => {
+            Token::ListItem(place) => {
+                at += 1;
+                if at >= tokens.len() {
+                    continue;
+                }
                 if let Some(place) = place {
                     let prefix = [Value::Number(*place), Value::Str(". ")];
                     try_apply_text_token(
                         &mut text,
-                        &text_token,
+                        &tokens[at],
                         TSpan::<2>::new().prefix(prefix),
                         &mut tspan_before,
                     );
                 } else {
-                    let prefix = [Value::Str("- ")];
+                    let prefix = [Value::Str("• ")];
                     try_apply_text_token(
                         &mut text,
-                        &text_token,
+                        &tokens[at],
                         TSpan::<1>::new().prefix(prefix),
                         &mut tspan_before,
                     );
                 }
+                at = write_until_line_break(
+                    &mut text,
+                    TSpan::<0>::new(),
+                    &mut tspan_before,
+                    at,
+                    tokens,
+                );
+                continue;
             }
             token => try_apply_text_token(&mut text, &token, TSpan::<0>::new(), &mut tspan_before),
         }
+        at += 1;
+        was_header = None;
     }
 
-    try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before);
+    try_apply_text(doc, &mut text, &mut text_before, &mut tspan_before);
 
     let content_height = calculate_content_height(text_before + 1);
     let mut tmp = String::new();
     config.write_start_tag_to(&mut tmp, content_height);
     doc.insert_str(0, &tmp);
-    config.write_end_tag_to(&mut doc);
-
-    doc
+    config.write_end_tag_to(doc);
 }
 
+fn write_until_line_break<'a, const N: usize>(
+    text: &mut String,
+    span: TSpan<'a, N>,
+    tspan_before: &mut u32,
+    mut at: usize,
+    tokens: &[Token],
+) -> usize {
+    while at < tokens.len() {
+        let token = &tokens[at];
+        if matches!(token, Token::LineBreak) {
+            break;
+        }
+        try_apply_text_token(text, &token, span.clone(), tspan_before);
+        at += 1;
+    }
+    at
+}
+
+#[derive(Clone)]
 enum Value<'a> {
     Number(usize),
     Str(&'a str),
@@ -203,6 +257,7 @@ impl Default for Position {
     }
 }
 
+#[derive(Clone)]
 struct TSpan<'a, const N: usize> {
     prefix: [Value<'a>; N],
     content: &'a str,
@@ -250,42 +305,42 @@ impl<'a, const N: usize> TSpan<'a, N> {
         }
     }
 
-    fn content(mut self, value: &'a str) -> Self {
+    const fn content(mut self, value: &'a str) -> Self {
         self.content = value;
         self
     }
 
-    fn font_family(mut self, value: &'a str) -> Self {
+    const fn font_family(mut self, value: &'a str) -> Self {
         self.font_family = Some(value);
         self
     }
 
-    fn font_size(mut self, value: &'a str) -> Self {
+    const fn font_size(mut self, value: &'a str) -> Self {
         self.font_size = Some(value);
         self
     }
 
-    fn font_weight(mut self, value: &'a str) -> Self {
+    const fn font_weight(mut self, value: &'a str) -> Self {
         self.font_weight = Some(value);
         self
     }
 
-    fn font_style(mut self, value: &'a str) -> Self {
+    const fn font_style(mut self, value: &'a str) -> Self {
         self.font_style = Some(value);
         self
     }
 
-    fn color(mut self, value: &'a str) -> Self {
+    const fn color(mut self, value: &'a str) -> Self {
         self.color = Some(value);
         self
     }
 
-    fn x(mut self, value: Position) -> Self {
+    const fn x(mut self, value: Position) -> Self {
         self.x = value;
         self
     }
 
-    fn y(mut self, value: Position) -> Self {
+    const fn y(mut self, value: Position) -> Self {
         self.y = value;
         self
     }
@@ -328,7 +383,7 @@ impl<'a, const N: usize> Display for TSpan<'a, N> {
     }
 }
 
-fn calculate_content_height(text_before: u32) -> u32 {
+const fn calculate_content_height(text_before: u32) -> u32 {
     (text_before * 12 * 16) / 10
 }
 
@@ -357,23 +412,22 @@ fn try_apply_text_token<'a, const N: usize>(
 ) {
     span = span.x(Position::Relative(if *tspan_before > 0 { 5 } else { 0 }));
     match token {
-        Token::Text {
+        Token::Text(Text {
             value,
             bold,
             italic,
-        } => {
+            code,
+        }) => {
             if *bold {
                 span = span.font_weight("bold");
             }
             if *italic {
                 span = span.font_style("italic");
             }
+            if *code {
+                span = span.font_family("monospace");
+            }
             write!(text, "{}", span.content(value.trim())).unwrap();
-            *tspan_before += 1;
-        }
-        Token::Code(code) => {
-            span = span.font_family("monospace");
-            write!(text, "{}", span.content(code.trim())).unwrap();
             *tspan_before += 1;
         }
         Token::Url {
@@ -383,12 +437,8 @@ fn try_apply_text_token<'a, const N: usize>(
         } => {
             write!(text, r#"<a xlink:href="{}" target="_blank">"#, url).unwrap();
             let name = name.as_ref().map_or_else(
-                || Token::Text {
-                    value: url,
-                    bold: false,
-                    italic: false,
-                },
-                |token| token.as_ref().clone(),
+                || Token::Text(Text::naked(url)),
+                |token| Token::Text(token.clone()),
             );
             try_apply_text_token(text, &name, span.color("blue"), tspan_before);
             text.push_str("</a>");
