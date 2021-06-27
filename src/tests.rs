@@ -1,170 +1,131 @@
+use crate::parser::{Text, Token};
+
 use super::*;
-use alloc::vec;
+use alloc::{format, vec};
 
 #[test]
 fn just_text() {
     assert_eq!(
-        parse("asdfdas"),
-        vec![Token::Text {
-            value: "asdfdas".to_string(),
-            bold: false,
-            italic: false,
-        },]
+        "asdfdas".parse_md(),
+        vec![Text::naked("asdfdas").into_token()]
     )
 }
 
 #[test]
 fn naked_url() {
     assert_eq!(
-        parse("<asdasd>"),
+        "<asdasd>".parse_md(),
         vec![Token::Url {
             is_image: false,
             name: None,
-            url: "asdasd".to_string(),
+            url: "asdasd",
         }],
     )
 }
 
 #[test]
 fn code() {
-    assert_eq!(parse("`coding`"), vec![Token::Code("coding".to_string()),]);
     assert_eq!(
-        parse("`coding``"),
-        vec![
-            Token::Code("coding".to_string()),
-            Token::Text {
-                value: "`".to_string(),
-                bold: false,
-                italic: false,
-            }
-        ]
+        "`coding`".parse_md(),
+        vec![Text::code("coding").into_token()]
     );
     assert_eq!(
-        parse("````"),
-        vec![Token::Code("".to_string()), Token::Code("".to_string())]
+        "`coding``".parse_md(),
+        vec![Text::code("coding").into_token()]
     );
+    assert_eq!("````".parse_md(), vec![]);
 }
 
 #[test]
 fn code_fence() {
     assert_eq!(
-        parse("```\ntest\n```"),
+        "```\ntest```".parse_md(),
         vec![Token::CodeFence {
-            attrs: vec![],
-            code: "test".to_string(),
+            attrs: "",
+            code: "test",
         }]
     );
     assert_eq!(
-        parse("```rust\ntest\n```"),
+        "```rust\ntest```".parse_md(),
         vec![Token::CodeFence {
-            attrs: vec!["rust".to_string()],
-            code: "test".to_string(),
+            attrs: "rust",
+            code: "test",
         }]
     );
     assert_eq!(
-        parse("```rust,norun\ntest\n```"),
+        "```rust,norun\ntest```".parse_md(),
         vec![Token::CodeFence {
-            attrs: vec!["rust".to_string(), "norun".to_string()],
-            code: "test".to_string(),
+            attrs: "rust,norun",
+            code: "test",
         }]
     );
 }
 
 #[test]
 fn bold_or_italic_text() {
-    fn text_t(v: impl AsRef<str>, bold: bool, italic: bool) {
-        let v = v.as_ref();
-        assert_eq!(
-            parse(v),
-            vec![Token::Text {
-                value: v.to_string(),
-                bold,
-                italic,
-            },],
-        );
-    }
-
     fn text_test(parsed: Vec<Token>, bold: bool, italic: bool) {
         assert_eq!(
             parsed,
-            vec![Token::Text {
-                value: "ada".to_string(),
+            vec![Token::Text(Text {
+                value: "ada",
                 bold,
                 italic,
-            },],
+                code: false,
+            })],
         );
     }
 
-    text_test(parse("ada"), false, false);
-    text_test(parse("*ada*"), false, true);
-    text_test(parse("**ada**"), true, false);
-    text_test(parse("***ada***"), true, true);
+    text_test("ada".parse_md(), false, false);
+    text_test("*ada*".parse_md(), false, true);
+    text_test("**ada**".parse_md(), true, false);
+    text_test("***ada***".parse_md(), true, true);
 
     assert_eq!(
-        parse("***ada**"),
-        vec![Token::Text {
-            value: "*ada".to_string(),
+        "***ada**".parse_md(),
+        vec![Token::Text(Text {
+            value: "*ada",
             bold: true,
-            italic: false,
-        },],
+            ..Default::default()
+        })],
     );
     assert_eq!(
-        parse("**ada*"),
-        vec![Token::Text {
-            value: "*ada".to_string(),
+        "**ada*".parse_md(),
+        vec![Token::Text(Text {
+            value: "*ada",
             italic: true,
-            bold: false,
-        },],
+            ..Default::default()
+        })],
     );
     assert_eq!(
-        parse("**ada***"),
-        vec![
-            Token::Text {
-                value: "ada".to_string(),
-                bold: true,
-                italic: false,
-            },
-            Token::Text {
-                value: "*".to_string(),
-                bold: false,
-                italic: false,
-            }
-        ],
+        "**ada***".parse_md(),
+        vec![Token::Text(Text {
+            value: "ada",
+            bold: true,
+            ..Default::default()
+        })],
     );
     assert_eq!(
-        parse("*ada**"),
-        vec![
-            Token::Text {
-                value: "ada".to_string(),
-                italic: true,
-                bold: false,
-            },
-            Token::Text {
-                value: "*".to_string(),
-                bold: false,
-                italic: false,
-            }
-        ],
+        "*ada**".parse_md(),
+        vec![Token::Text(Text {
+            value: "ada",
+            italic: true,
+            ..Default::default()
+        })],
     );
 
-    for i in 1..12 {
-        let t = (0..i).map(|_| '*').collect::<String>();
-        text_t(t, false, false);
-    }
-
     assert_eq!(
-        parse("**g** *g*"),
+        "**g** *g*".parse_md(),
         vec![
-            Token::Text {
-                value: "g".to_string(),
+            Token::Text(Text {
+                value: "g",
                 bold: true,
-                italic: false,
-            },
-            Token::Text {
-                value: "g".to_string(),
+                ..Default::default()
+            }),
+            Token::Text(Text {
+                value: "g",
                 italic: true,
-                bold: false,
-            }
+                ..Default::default()
+            })
         ],
     );
 }
@@ -176,81 +137,50 @@ fn header() {
     const NOT_HEADER: &str = "#asdasd";
     const HEADER_AFTER_HEADER: &str = "# #asdf";
 
-    let parsed = parse(HEADER);
+    let parsed = HEADER.parse_md();
     assert_eq!(
         parsed,
-        vec![Token::Header {
-            depth: 1,
-            text: Token::Text {
-                value: "asdasd".to_string(),
-                italic: false,
-                bold: false,
-            }
-            .into()
-        }],
+        vec![Token::Header(1), Text::naked("asdasd").into_token(),],
     );
 
-    let parsed = parse(HEADER_3);
+    let parsed = HEADER_3.parse_md();
     assert_eq!(
         parsed,
-        vec![Token::Header {
-            depth: 3,
-            text: Token::Text {
-                value: "asdasd".to_string(),
-                italic: false,
-                bold: false,
-            }
-            .into(),
-        }],
+        vec![Token::Header(3), Text::naked("asdasd").into_token()],
     );
 
-    let parsed = parse(NOT_HEADER);
-    assert_eq!(
-        parsed,
-        vec![Token::Text {
-            value: NOT_HEADER.to_string(),
-            bold: false,
-            italic: false,
-        },],
-    );
+    let parsed = NOT_HEADER.parse_md();
+    assert_eq!(parsed, vec![Text::naked(NOT_HEADER).into_token()]);
 
-    let parsed = parse(HEADER_AFTER_HEADER);
+    let parsed = HEADER_AFTER_HEADER.parse_md();
     assert_eq!(
         parsed,
-        vec![Token::Header {
-            depth: 1,
-            text: Token::Text {
-                value: "#asdf".to_string(),
-                italic: false,
-                bold: false,
-            }
-            .into()
-        }],
+        vec![Token::Header(1), Text::naked("#asdf").into_token()],
+    );
+}
+
+fn ordered_test(parsed: Vec<Token>, place: usize) {
+    assert_eq!(
+        parsed,
+        vec![
+            Token::ListItem(Some(place)),
+            Text::naked("ada").into_token(),
+        ],
     );
 }
 
 #[test]
 fn ordered_lists() {
-    fn ordered_test(parsed: Vec<Token>, place: usize) {
-        assert_eq!(
-            parsed,
-            vec![Token::ListItem {
-                place: Some(place),
-                text: Token::Text {
-                    value: "ada".to_string(),
-                    italic: false,
-                    bold: false,
-                }
-                .into(),
-            }]
-        );
+    for place in 0..=100 {
+        ordered_test(format!("{}. ada", place).parse_md(), place);
     }
+}
 
+#[test]
+#[should_panic]
+fn ordered_list_wrong() {
     for place in 0..=100 {
-        ordered_test(parse(format!("{}. ada", place)), place);
-    }
-    for place in 0..=100 {
-        ordered_test(parse(format!("{}.ada", place)), place);
+        ordered_test(format!("{}.ada", place).parse_md(), place);
     }
 }
 
@@ -259,33 +189,102 @@ fn unordered_lists() {
     fn unordered_test(parsed: Vec<Token>) {
         assert_eq!(
             parsed,
-            vec![Token::ListItem {
-                place: None,
-                text: Token::Text {
-                    value: "ada".to_string(),
-                    italic: false,
-                    bold: false,
-                }
-                .into(),
-            }]
+            vec![Token::ListItem(None), Text::naked("ada").into_token()]
         );
     }
 
-    unordered_test(parse("- ada"));
-    unordered_test(parse("+ ada"));
-    unordered_test(parse("* ada"));
+    unordered_test("- ada".parse_md());
+    unordered_test("+ ada".parse_md());
+    unordered_test("* ada".parse_md());
+}
+
+#[test]
+fn html_paragraph_no_newline() {
+    assert_eq!(
+        &render_as_html("asdfadsfas".parse_md()),
+        "<p>asdfadsfas </p>"
+    )
+}
+
+#[test]
+fn html_paragraph_newline() {
+    assert_eq!(
+        &render_as_html("asdfadsfas\n".parse_md()),
+        "<p>asdfadsfas </p>\n"
+    )
+}
+
+#[test]
+fn html_paragraph_two_newline() {
+    assert_eq!(
+        &render_as_html("asdfadsfas\n\n".parse_md()),
+        "<p>asdfadsfas </p>\n\n"
+    )
+}
+
+#[test]
+fn html_paragraph_newline_paragraph() {
+    assert_eq!(
+        &render_as_html("asdfadsfas\nasdfasd".parse_md()),
+        "<p>asdfadsfas \nasdfasd </p>"
+    )
+}
+
+#[test]
+fn html_paragraph_two_newline_paragraph() {
+    assert_eq!(
+        &render_as_html("asdfadsfas\n\nasdfas".parse_md()),
+        "<p>asdfadsfas </p>\n\n<p>asdfas </p>"
+    )
+}
+
+#[test]
+fn weird_md() {
+    const WEIRD_MD: &str = include_str!("../examples/weird.md");
+    let output = vec![
+        Text::naked("asdf ").into_token(),
+        Text::code("asdfasdf").into_token(),
+        Token::LineBreak,
+        Token::LineBreak,
+        Token::CodeFence {
+            code:
+                "asdfasdf\n\n\n\n# asdfasdf\n\n!!! ** ** *11*   *\n\n\\\\1***13\n\n##!\n\n``\n`\n\n",
+            attrs: "",
+        },
+        Token::LineBreak,
+        Token::LineBreak,
+        Text::naked("123123").into_token(),
+        Token::LineBreak,
+    ];
+    assert_eq!(WEIRD_MD.parse_md(), output)
+}
+
+#[test]
+fn text_seperating() {
+    assert_eq!(
+        "asdfadsf `asdf` <example>".parse_md(),
+        vec![
+            Text::naked("asdfadsf ").into_token(),
+            Text::code("asdf").into_token(),
+            Token::Url {
+                name: None,
+                url: "example",
+                is_image: false
+            }
+        ]
+    )
 }
 
 const MD: &str = include_str!("../examples/all.md");
 
 #[test]
 fn to_html() {
-    let html = render_as_html(parse(MD));
-    assert_eq!(html, include_str!("../examples/all.html"));
+    let html = render_as_html(&MD.parse_md());
+    assert_eq!(&html, include_str!("../examples/all.html"));
 }
 
 #[test]
 fn to_svg() {
-    let svg = render_as_svg(parse(MD), SvgConfig::default());
-    assert_eq!(svg, include_str!("../examples/all.svg"));
+    let svg = render_as_svg(&MD.parse_md(), SvgConfig::default());
+    assert_eq!(&svg, include_str!("../examples/all.svg"));
 }

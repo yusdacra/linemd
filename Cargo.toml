@@ -30,3 +30,7 @@ required-features = ["html", "svg"]
 [[example]]
 name = "all"
 required-features = ["html", "svg"]
+
+[profile.release]
+panic = "abort"
+opt-level = 3

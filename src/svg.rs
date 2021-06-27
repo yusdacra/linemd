@@ -1,6 +1,9 @@
+use crate::parser::{Text, Token};
+
 use super::*;
 use core::fmt::{self, Display, Formatter, Write};
 
+/// Value that specifies the dimensions of an SVG document.
 #[derive(Debug)]
 pub enum ViewportDimensions<'a> {
     /// Width and height in pixels (px).
@@ -31,31 +34,31 @@ pub struct Config<'a> {
 
 impl<'a> Config<'a> {
     /// Set the dimensions of the resulting SVG document.
-    pub fn dimensions(mut self, value: ViewportDimensions<'a>) -> Self {
+    pub const fn dimensions(mut self, value: ViewportDimensions<'a>) -> Self {
         self.dimensions = value;
         self
     }
 
     /// Set the font family of the resulting SVG document.
-    pub fn font_family(mut self, value: &'a str) -> Self {
+    pub const fn font_family(mut self, value: &'a str) -> Self {
         self.font_family = Some(value);
         self
     }
 
     /// Set the font size of the resulting SVG document.
-    pub fn font_size(mut self, value: &'a str) -> Self {
+    pub const fn font_size(mut self, value: &'a str) -> Self {
         self.font_size = Some(value);
         self
     }
 
     /// Set the font style of the resulting SVG document.
-    pub fn font_style(mut self, value: &'a str) -> Self {
+    pub const fn font_style(mut self, value: &'a str) -> Self {
         self.font_style = Some(value);
         self
     }
 
     /// Set the font weight of the resulting SVG document.
-    pub fn font_weight(mut self, value: &'a str) -> Self {
+    pub const fn font_weight(mut self, value: &'a str) -> Self {
         self.font_weight = Some(value);
         self
     }
@@ -96,27 +99,52 @@ impl<'a> Config<'a> {
     }
 }
 
-/// Renders parsed tokens (`Vec<Token>`) as SVG.
+/// Renders parsed tokens as SVG.
 ///
 /// # Example
 /// ```
-/// # use linemd::{parse, render_as_svg, SvgConfig};
-/// let svg = render_as_svg(parse("Some uninspiring text."), SvgConfig::default());
+/// # use linemd::{render_as_svg, SvgConfig, Parser};
+/// let svg = render_as_svg("Some uninspiring text.".parse_md(), SvgConfig::default());
 /// ```
-pub fn render_as_svg(tokens: alloc::vec::Vec<Token>, config: Config<'_>) -> String {
+pub fn render_as_svg<'a>(tokens: impl AsRef<[Token<'a>]> + 'a, config: Config<'_>) -> String {
     let mut doc = String::new();
+    render_to_buffer(tokens, config, &mut doc);
+    doc
+}
+
+/// Renders parsed tokens as SVG, to a buffer.
+///
+/// # Example
+/// ```
+/// # use linemd::{svg, SvgConfig, Parser};
+/// let mut buffer = String::new();
+/// let svg = svg::render_to_buffer("Some uninspiring text.".parse_md(), SvgConfig::default(), &mut buffer);
+/// ```
+pub fn render_to_buffer<'a>(
+    tokens: impl AsRef<[Token<'a>]> + 'a,
+    config: Config<'_>,
+    doc: &mut String,
+) {
     let mut text = String::new();
     let mut text_before: u32 = 1;
     let mut tspan_before: u32 = 0;
 
-    for token in tokens {
+    let mut at = 0;
+    let tokens = tokens.as_ref();
+    let mut was_header = None;
+
+    while at < tokens.len() {
+        let token = &tokens[at];
         match token {
             Token::LineBreak => {
-                try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before)
+                try_apply_text(doc, &mut text, &mut text_before, &mut tspan_before);
+                if let Some(depth) = was_header {
+                    text_before += 7_u32.saturating_sub(depth as u32) / 4;
+                }
             }
             Token::CodeFence { code, attrs: _ } => {
                 for line in code.lines() {
-                    let span = TSpan::new()
+                    let span = TSpan::<0>::new()
                         .content(line)
                         .font_family("monospace")
                         .x(Position::Absolute(0))
@@ -124,11 +152,8 @@ pub fn render_as_svg(tokens: alloc::vec::Vec<Token>, config: Config<'_>) -> Stri
                     write!(text, "{}", span).unwrap();
                 }
             }
-            Token::Header {
-                depth,
-                text: text_token,
-            } => {
-                let size = match depth {
+            Token::Header(depth) => {
+                let size = match *depth {
                     1 => "xx-large",
                     2 => "x-large",
                     3 => "large",
@@ -139,45 +164,86 @@ pub fn render_as_svg(tokens: alloc::vec::Vec<Token>, config: Config<'_>) -> Stri
                     x if x < 1 => "xx-large",
                     _ => unreachable!(),
                 };
-                text_before += 7_u32.saturating_sub(depth as u32) / 4;
-                try_apply_text_token(
+                text_before += 7_u32.saturating_sub(*depth as u32) / 4;
+                at += 1;
+                at = write_until_line_break(
                     &mut text,
-                    *text_token,
-                    TSpan::new().font_size(size),
+                    TSpan::<0>::new().font_size(size),
                     &mut tspan_before,
+                    at,
+                    tokens,
                 );
-                try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before);
-                text_before += 7_u32.saturating_sub(depth as u32) / 4;
+                was_header = Some(*depth);
+                continue;
             }
-            Token::ListItem {
-                place,
-                text: text_token,
-            } => {
-                let prefix = if let Some(place) = place {
-                    format!("{}. ", place)
+            Token::ListItem(place) => {
+                at += 1;
+                if at >= tokens.len() {
+                    continue;
+                }
+                if let Some(place) = place {
+                    let prefix = [Value::Number(*place), Value::Str(". ")];
+                    try_apply_text_token(
+                        &mut text,
+                        &tokens[at],
+                        TSpan::<2>::new().prefix(prefix),
+                        &mut tspan_before,
+                    );
                 } else {
-                    "- ".to_string()
-                };
-                try_apply_text_token(
+                    let prefix = [Value::Str("• ")];
+                    try_apply_text_token(
+                        &mut text,
+                        &tokens[at],
+                        TSpan::<1>::new().prefix(prefix),
+                        &mut tspan_before,
+                    );
+                }
+                at = write_until_line_break(
                     &mut text,
-                    *text_token,
-                    TSpan::new().prefix(prefix.as_str()),
+                    TSpan::<0>::new(),
                     &mut tspan_before,
+                    at,
+                    tokens,
                 );
+                continue;
             }
-            token => try_apply_text_token(&mut text, token, TSpan::new(), &mut tspan_before),
+            token => try_apply_text_token(&mut text, &token, TSpan::<0>::new(), &mut tspan_before),
         }
+        at += 1;
+        was_header = None;
     }
 
-    try_apply_text(&mut doc, &mut text, &mut text_before, &mut tspan_before);
+    try_apply_text(doc, &mut text, &mut text_before, &mut tspan_before);
 
     let content_height = calculate_content_height(text_before + 1);
     let mut tmp = String::new();
     config.write_start_tag_to(&mut tmp, content_height);
     doc.insert_str(0, &tmp);
-    config.write_end_tag_to(&mut doc);
+    config.write_end_tag_to(doc);
+}
 
-    doc
+fn write_until_line_break<'a, const N: usize>(
+    text: &mut String,
+    span: TSpan<'a, N>,
+    tspan_before: &mut u32,
+    mut at: usize,
+    tokens: &[Token],
+) -> usize {
+    while at < tokens.len() {
+        let token = &tokens[at];
+        if matches!(token, Token::LineBreak) {
+            break;
+        }
+        try_apply_text_token(text, &token, span.clone(), tspan_before);
+        at += 1;
+    }
+    at
+}
+
+#[derive(Clone)]
+enum Value<'a> {
+    Number(usize),
+    Str(&'a str),
 }
 
 #[derive(Clone, Copy)]
@@ -192,9 +258,9 @@ impl Default for Position {
     }
 }
 
-#[derive(Default)]
-struct TSpan<'a> {
-    prefix: Option<&'a str>,
+#[derive(Clone)]
+struct TSpan<'a, const N: usize> {
+    prefix: [Value<'a>; N],
     content: &'a str,
     font_family: Option<&'a str>,
     font_size: Option<&'a str>,
@@ -205,58 +271,83 @@ struct TSpan<'a> {
     y: Position,
 }
 
-impl<'a> TSpan<'a> {
-    fn new() -> Self {
+impl<'a> Default for TSpan<'a, 0> {
+    fn default() -> Self {
+        Self {
+            prefix: [],
+            content: "",
+            font_family: None,
+            font_size: None,
+            font_weight: None,
+            font_style: None,
+            color: None,
+            x: Position::default(),
+            y: Position::default(),
+        }
+    }
+}
+
+impl<'a, const N: usize> TSpan<'a, N> {
+    fn new() -> TSpan<'a, 0> {
         Default::default()
     }
 
-    fn prefix(mut self, value: &'a str) -> Self {
-        self.prefix = Some(value);
-        self
+    fn prefix<const S: usize>(self, value: [Value<'a>; S]) -> TSpan<'a, S> {
+        TSpan::<'a> {
+            prefix: value,
+            content: self.content,
+            font_family: self.font_family,
+            font_size: self.font_size,
+            font_weight: self.font_weight,
+            font_style: self.font_style,
+            color: self.color,
+            x: self.x,
+            y: self.y,
+        }
     }
 
-    fn content(mut self, value: &'a str) -> Self {
+    const fn content(mut self, value: &'a str) -> Self {
         self.content = value;
         self
     }
 
-    fn font_family(mut self, value: &'a str) -> Self {
+    const fn font_family(mut self, value: &'a str) -> Self {
         self.font_family = Some(value);
         self
     }
 
-    fn font_size(mut self, value: &'a str) -> Self {
+    const fn font_size(mut self, value: &'a str) -> Self {
         self.font_size = Some(value);
         self
     }
 
-    fn font_weight(mut self, value: &'a str) -> Self {
+    const fn font_weight(mut self, value: &'a str) -> Self {
         self.font_weight = Some(value);
         self
     }
 
-    fn font_style(mut self, value: &'a str) -> Self {
+    const fn font_style(mut self, value: &'a str) -> Self {
         self.font_style = Some(value);
         self
     }
 
-    fn color(mut self, value: &'a str) -> Self {
+    const fn color(mut self, value: &'a str) -> Self {
         self.color = Some(value);
         self
     }
 
-    fn x(mut self, value: Position) -> Self {
+    const fn x(mut self, value: Position) -> Self {
         self.x = value;
         self
     }
 
-    fn y(mut self, value: Position) -> Self {
+    const fn y(mut self, value: Position) -> Self {
         self.y = value;
         self
     }
 }
 
-impl<'a> Display for TSpan<'a> {
+impl<'a, const N: usize> Display for TSpan<'a, N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "<tspan")?;
         match self.x {
@@ -282,11 +373,18 @@ impl<'a> Display for TSpan<'a> {
         if let Some(color) = self.color {
             write!(f, r#" fill="{}""#, color)?;
         }
-        write!(f, ">{}{}</tspan>", self.prefix.unwrap_or(""), self.content)
+        f.write_char('>')?;
+        for v in &self.prefix {
+            match v {
+                Value::Number(n) => write!(f, "{}", n)?,
+                Value::Str(s) => f.write_str(s)?,
+            }
+        }
+        write!(f, "{}</tspan>", self.content)
     }
 }
 
-fn calculate_content_height(text_before: u32) -> u32 {
+const fn calculate_content_height(text_before: u32) -> u32 {
     (text_before * 12 * 16) / 10
 }
 
@@ -307,31 +405,30 @@ fn try_apply_text(
     }
 }
 
-fn try_apply_text_token<'a>(
+fn try_apply_text_token<'a, const N: usize>(
     text: &mut String,
-    token: Token,
-    mut span: TSpan<'a>,
+    token: &Token,
+    mut span: TSpan<'a, N>,
     tspan_before: &mut u32,
 ) {
     span = span.x(Position::Relative(if *tspan_before > 0 { 5 } else { 0 }));
     match token {
-        Token::Text {
+        Token::Text(Text {
             value,
             bold,
             italic,
-        } => {
-            if bold {
+            code,
+        }) => {
+            if *bold {
                 span = span.font_weight("bold");
             }
-            if italic {
+            if *italic {
                 span = span.font_style("italic");
             }
+            if *code {
+                span = span.font_family("monospace");
+            }
             write!(text, "{}", span.content(value.trim())).unwrap();
-            *tspan_before += 1;
-        }
-        Token::Code(code) => {
-            span = span.font_family("monospace");
-            write!(text, "{}", span.content(code.trim())).unwrap();
             *tspan_before += 1;
         }
         Token::Url {
@@ -340,15 +437,11 @@ fn try_apply_text_token<'a>(
             url,
         } => {
             write!(text, r#"<a xlink:href="{}" target="_blank">"#, url).unwrap();
-            let name = name.map_or_else(
-                || Token::Text {
-                    value: url,
-                    bold: false,
-                    italic: false,
-                },
-                |token| *token,
+            let name = name.as_ref().map_or_else(
+                || Token::Text(Text::naked(url)),
+                |token| Token::Text(token.clone()),
             );
-            try_apply_text_token(text, name, span.color("blue"), tspan_before);
+            try_apply_text_token(text, &name, span.color("blue"), tspan_before);
             text.push_str("</a>");
         }
         _ => {}
