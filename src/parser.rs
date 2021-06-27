@@ -186,65 +186,28 @@ pub trait Parser {
             .flatten()
             .map(|(stars, nat)| {
                 let count = stars.len();
-                (count > 0)
-                    .then(|| {
-                        self.consume_until_str(nat, stars)
+                (1..=count)
+                    .rev()
+                    .flat_map(|search| {
+                        let check_italic = count == 2 && search == 1;
+                        let offset = check_italic.not().then(|| count - search).unwrap_or(0);
+                        self.consume_until_str(nat - offset, &stars[0..search])
                             .ok()
                             .flatten()
-                            .map(|(s, nat)| {
+                            .map(|(s, nnat)| {
                                 (
                                     Token::Text {
-                                        value: s,
-                                        bold: count != 1,
-                                        italic: count != 2,
+                                        value: check_italic
+                                            .then(|| self.get_range_str(nat - 1..nnat))
+                                            .unwrap_or(s),
+                                        bold: search != 1,
+                                        italic: search != 2,
                                     },
-                                    nat + count,
+                                    nnat + search,
                                 )
                             })
-                            .or_else(|| {
-                                (count == 2)
-                                    .then(|| {
-                                        self.consume_until_str(nat, &stars[0..1])
-                                            .ok()
-                                            .flatten()
-                                            .map(|(_, nnat)| {
-                                                (
-                                                    Token::Text {
-                                                        value: self.get_range_str(nat - 1..nnat),
-                                                        bold: false,
-                                                        italic: true,
-                                                    },
-                                                    nnat + 1,
-                                                )
-                                            })
-                                    })
-                                    .flatten()
-                                    .or_else(|| {
-                                        (2..count)
-                                            .rev()
-                                            .flat_map(|search| {
-                                                self.consume_until_str(
-                                                    nat - (count - search),
-                                                    &stars[0..search],
-                                                )
-                                                .ok()
-                                                .flatten()
-                                                .map(|(s, nat)| {
-                                                    (
-                                                        Token::Text {
-                                                            value: s,
-                                                            bold: search != 1,
-                                                            italic: search != 2,
-                                                        },
-                                                        nat + search,
-                                                    )
-                                                })
-                                            })
-                                            .next()
-                                    })
-                            })
                     })
-                    .flatten()
+                    .next()
             })
             .flatten()
     }
