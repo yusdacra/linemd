@@ -271,7 +271,9 @@ pub trait Parser {
     fn consume_char(&self, at: usize) -> Result<(char, usize), ParserError> {
         self.next_char(at).map(|c| (c, at + char_bytes(c)))
     }
+    /// Gets a string slice using the provided range.
     fn get_range_str<S: SliceIndex<str>>(&self, range: S) -> &S::Output;
+    /// Gets the character on index `at`.
     fn next_char(&self, at: usize) -> Result<char, ParserError>;
 }
 
