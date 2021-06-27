@@ -3,6 +3,7 @@ use crate::parser::{Text, Token};
 use super::*;
 use core::fmt::{self, Display, Formatter, Write};
 
+/// Value that specifies the dimensions of an SVG document.
 #[derive(Debug)]
 pub enum ViewportDimensions<'a> {
     /// Width and height in pixels (px).
