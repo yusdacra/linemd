@@ -1,5 +1,5 @@
 #![cfg_attr(tests, no_std)]
-//! `linemd` is a simple and opinionated markdown parsing library.
+//! `linemd` is a simple markdown parsing library.
 
 extern crate alloc;
 #[cfg(any(feature = "html", feature = "svg"))]

@@ -1,4 +1,4 @@
-renders a markdown file as HTML
+renders a markdown file
 
 usage:
   linemd FILE     Reads from file

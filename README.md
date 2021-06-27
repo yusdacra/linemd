@@ -2,12 +2,17 @@
 [![docs.rs](https://docs.rs/linemd/badge.svg)](https://docs.rs/linemd)
 
 # linemd
-`linemd` is a simple, no deps, markdown parser and renderer.
+
+`linemd` is a simple, no dependencies, markdown parser and renderer.
+
 ## Features
-- No deps
-- Can render to HTML and SVG; they need `html` and `svg` features enabled respectively
-  - By default, `html` feature is enabled
-- Comes with a CLI utility for rendering to HTML or SVG
+
+- No dependencies.
+- Does not depend on `std`, only depends on `alloc` and `core`.
+- No allocations while parsing; only allocation is done to store the tokens (unless you provide your own preallocated `Vec`).
+- Can render to HTML and SVG; they need `html` and `svg` features enabled respectively.
+  - By default, `html` feature is enabled.
+- Comes with a CLI utility for rendering to HTML or SVG.
 
 ## Install
 
@@ -18,30 +23,12 @@
   - Non-flakes: `nix-env -i -f "https://github.com/yusdacra/linemd/tarball/master"`
 
 ## Usage
-```rust
-let md: String;
 
-let tokens = linemd::md.parse_md();
-// use tokens however you want
-```
-
-You can also render as HTML (needs `html` feature enabled):
-```rust
-let parsed_tokens: Vec<Token>;
-
-let html = linemd::render_as_html(parsed_tokens);
-```
-
-Or SVG (needs `svg` feature enabled):
-```rust
-let parsed_tokens: Vec<Token>;
-
-let svg = linemd::render_as_svg(parsed_tokens);
-```
+See the [library documentation](https://docs.rs/linemd) for library usage.
 
 CLI usage:
 ```
-renders a markdown file as HTML
+renders a markdown file
 
 usage:
   linemd FILE     Reads from file
