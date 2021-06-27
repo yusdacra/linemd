@@ -79,36 +79,25 @@ pub trait Parser {
         self.consume_while(at, |c| is_backtick(c).not())
             .ok()
             .flatten()
-            .map(|(value, at)| {
-                (
-                    Token::Text(Text {
-                        value,
-                        code: true,
-                        ..Default::default()
-                    }),
-                    at + 1,
-                )
-            })
+            .map(|(value, at)| (Text::code(value).into_token(), at + 1))
     }
     fn parse_list_item(&self, at: usize) -> Option<AtToken<'_>> {
-        self.consume_while(at, |c| c.is_numeric() || matches!(c, '-' | '+' | '*'))
-            .ok()
-            .flatten()
-            .map(|(place, nat)| {
-                self.next_char(nat)
+        self.consume_char_if(at, |c| matches!(c, '-' | '+' | '*'))
+            .map(|nat| (None, nat))
+            .or_else(|| {
+                self.consume_while(at, |c| c.is_ascii_digit())
                     .ok()
-                    .map(|c| {
-                        let place = place.parse::<usize>().ok();
-                        let (place, nat) = place
-                            .map(|place| (c == '.').then(|| (Some(place), nat + 1)))
-                            .flatten()
-                            .unwrap_or((None, nat));
-                        self.consume_whitespace(nat)
-                            .map(|(w, wnat)| {
-                                w.is_empty().not().then(|| (Token::ListItem(place), wnat))
-                            })
+                    .flatten()
+                    .map(|(place, nat)| {
+                        self.consume_char_if(nat, |c| c == '.')
+                            .map(|nat| place.parse::<usize>().ok().map(|p| (Some(p), nat)))
                             .flatten()
                     })
+                    .flatten()
+            })
+            .map(|(place, nat)| {
+                self.consume_whitespace(nat)
+                    .map(|(s, nat)| s.is_empty().not().then(|| (Token::ListItem(place), nat)))
                     .flatten()
             })
             .flatten()
@@ -120,24 +109,17 @@ pub trait Parser {
             .map(|(v, at)| {
                 let part_count = v.split('\n').count();
 
-                let token = if part_count >= 1 {
-                    let mut split = v.split('\n');
-                    let attrs_raw = split.next().unwrap();
-                    let code = v.trim_start_matches(attrs_raw).trim_start_matches('\n');
-                    Token::CodeFence {
-                        code,
-                        attrs: attrs_raw,
-                    }
-                } else {
-                    Token::CodeFence {
-                        code: v.trim_start_matches('\n'),
-                        attrs: "",
-                    }
-                };
+                let (code, attrs) = (part_count >= 1)
+                    .then(|| {
+                        let mut split = v.split('\n');
+                        let attrs_raw = split.next().unwrap();
+                        let code = v.trim_start_matches(attrs_raw).trim_start_matches('\n');
+                        (code, attrs_raw)
+                    })
+                    .unwrap_or_else(|| (v.trim_start_matches('\n'), ""));
 
-                Some((token, at + 3))
+                (Token::CodeFence { code, attrs }, at + 3)
             })
-            .flatten()
     }
     fn parse_header(&self, at: usize) -> Option<AtToken<'_>> {
         self.consume_while(at, |c| c == '#')
@@ -150,7 +132,7 @@ pub trait Parser {
                             .not()
                             .then(|| {
                                 let h = hnat - at;
-                                (h > 0).then(|| (Token::Header(h.max(1).min(6)), nat))
+                                (h > 0 && h < 7).then(|| (Token::Header(h), nat))
                             })
                             .flatten()
                     })
@@ -159,10 +141,8 @@ pub trait Parser {
             .flatten()
     }
     fn parse_inline_url(&self, at: usize) -> Option<AtToken<'_>> {
-        self.consume_while(at, |c| c == '<')
-            .ok()
-            .flatten()
-            .map(|(_, nat)| {
+        self.consume_char_if(at, |c| c == '<')
+            .map(|nat| {
                 self.consume_while(nat, |c| c != '>')
                     .ok()
                     .flatten()
@@ -216,10 +196,8 @@ pub trait Parser {
             })
     }
     fn parse_line_break(&self, at: usize) -> Option<AtToken<'_>> {
-        self.consume_char(at)
-            .ok()
-            .map(|(c, nat)| (c == '\n').then(|| (Token::LineBreak, nat)))
-            .flatten()
+        self.consume_char_if(at, |c| c == '\n')
+            .map(|nat| (Token::LineBreak, nat))
     }
     fn consume_whitespace(&self, at: usize) -> Option<AtStr<'_>> {
         self.consume_while(at, |c| c != '\n' && c.is_whitespace())
@@ -227,6 +205,13 @@ pub trait Parser {
                 ParserError::EOF => maybe_info,
             })
             .or(Some(("", at)))
+    }
+    #[inline(always)]
+    fn consume_char_if<F: Fn(char) -> bool>(&self, at: usize, f: F) -> Option<usize> {
+        self.consume_char(at)
+            .ok()
+            .map(|(c, nat)| f(c).then(|| nat))
+            .flatten()
     }
     #[inline(always)]
     fn consume_while<F: Fn(char) -> bool>(
