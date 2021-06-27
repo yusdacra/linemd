@@ -1,9 +1,8 @@
-#![cfg_attr(tests, no_std)]
+#![no_std]
 //! `linemd` is a simple markdown parsing library.
 
 extern crate alloc;
-#[cfg(any(feature = "html", feature = "svg"))]
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 
 /// Parser types used to parse markdown.
 pub mod parser;

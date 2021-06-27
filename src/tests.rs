@@ -225,7 +225,7 @@ fn html_paragraph_two_newline() {
 #[test]
 fn html_paragraph_newline_paragraph() {
     assert_eq!(
-        &render_as_html(dbg!("asdfadsfas\nasdfasd".parse_md())),
+        &render_as_html("asdfadsfas\nasdfasd".parse_md()),
         "<p>asdfadsfas \nasdfasd </p>"
     )
 }
