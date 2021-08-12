@@ -20,6 +20,8 @@ pub type AtToken<'a, Custom> = AtWith<Token<'a, Custom>>;
 /// Convenience type alias that is a tuple of a text and an index.
 pub type AtText<'a> = AtWith<Text<'a>>;
 
+type CustomFn<'a, Custom, S> = fn(&'a S, usize) -> Option<AtToken<'a, Custom>>;
+
 /// The core of this crate. This trait implements markdown parsing, and several utilities.
 ///
 /// Implementing this trait for your own types is very easy, the onyl required methods are `next_char`
@@ -41,23 +43,19 @@ pub trait Parser {
         }
     }
     /// Parses self for tokens, with a custom token producer.
-    fn parse_md_custom<Custom, CustomFn: Copy + Fn(&Self, usize) -> Option<AtToken<'_, Custom>>>(
-        &self,
-        custom: CustomFn,
+    fn parse_md_custom<'a, Custom>(
+        &'a self,
+        custom: CustomFn<'a, Custom, Self>,
     ) -> Vec<Token<'_, Custom>> {
         let mut tokens = Vec::new();
         self.parse_md_with_buf_custom(&mut tokens, custom);
         tokens
     }
     /// Parses self for tokens, and outputs to a buffer, with a custom token producer.
-    fn parse_md_with_buf_custom<
-        'a,
-        Custom,
-        CustomFn: Copy + Fn(&Self, usize) -> Option<AtToken<'_, Custom>>,
-    >(
+    fn parse_md_with_buf_custom<'a, Custom>(
         &'a self,
         buf: &mut Vec<Token<'a, Custom>>,
-        custom: CustomFn,
+        custom: CustomFn<'a, Custom, Self>,
     ) {
         let mut at = 0;
         while let Some((token, nat)) = self.parse_token(at, custom) {
@@ -65,10 +63,10 @@ pub trait Parser {
             buf.push(token);
         }
     }
-    fn parse_token<Custom, CustomFn: Fn(&Self, usize) -> Option<AtToken<'_, Custom>>>(
-        &self,
+    fn parse_token<'a, Custom>(
+        &'a self,
         at: usize,
-        custom: CustomFn,
+        custom: CustomFn<'a, Custom, Self>,
     ) -> Option<AtToken<'_, Custom>> {
         self.eof(at)
             .not()
@@ -339,7 +337,7 @@ const fn is_backtick(c: char) -> bool {
 
 /// A token from some parsed text.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Token<'a, Custom> {
+pub enum Token<'a, Custom: 'a> {
     /// Some text.
     Text(Text<'a>),
     /// An URL.
