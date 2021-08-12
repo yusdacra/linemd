@@ -106,7 +106,7 @@ impl<'a> Config<'a> {
 /// # use linemd::{render_as_svg, SvgConfig, Parser};
 /// let svg = render_as_svg("Some uninspiring text.".parse_md(), SvgConfig::default());
 /// ```
-pub fn render_as_svg<'a>(tokens: impl AsRef<[Token<'a>]> + 'a, config: Config<'_>) -> String {
+pub fn render_as_svg<'a>(tokens: impl AsRef<[Token<'a, ()>]> + 'a, config: Config<'_>) -> String {
     let mut doc = String::new();
     render_to_buffer(tokens, config, &mut doc);
     doc
@@ -121,7 +121,7 @@ pub fn render_as_svg<'a>(tokens: impl AsRef<[Token<'a>]> + 'a, config: Config<'_
 /// let svg = svg::render_to_buffer("Some uninspiring text.".parse_md(), SvgConfig::default(), &mut buffer);
 /// ```
 pub fn render_to_buffer<'a>(
-    tokens: impl AsRef<[Token<'a>]> + 'a,
+    tokens: impl AsRef<[Token<'a, ()>]> + 'a,
     config: Config<'_>,
     doc: &mut String,
 ) {
@@ -207,7 +207,7 @@ pub fn render_to_buffer<'a>(
                 );
                 continue;
             }
-            token => try_apply_text_token(&mut text, &token, TSpan::<0>::new(), &mut tspan_before),
+            token => try_apply_text_token(&mut text, token, TSpan::<0>::new(), &mut tspan_before),
         }
         at += 1;
         was_header = None;
@@ -227,14 +227,14 @@ fn write_until_line_break<'a, const N: usize>(
     span: TSpan<'a, N>,
     tspan_before: &mut u32,
     mut at: usize,
-    tokens: &[Token],
+    tokens: &[Token<()>],
 ) -> usize {
     while at < tokens.len() {
         let token = &tokens[at];
         if matches!(token, Token::LineBreak) {
             break;
         }
-        try_apply_text_token(text, &token, span.clone(), tspan_before);
+        try_apply_text_token(text, token, span.clone(), tspan_before);
         at += 1;
     }
     at
@@ -407,7 +407,7 @@ fn try_apply_text(
 
 fn try_apply_text_token<'a, const N: usize>(
     text: &mut String,
-    token: &Token,
+    token: &Token<()>,
     mut span: TSpan<'a, N>,
     tspan_before: &mut u32,
 ) {

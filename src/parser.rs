@@ -15,7 +15,7 @@ pub type AtWith<T> = (T, usize);
 pub type AtStr<'a> = AtWith<&'a str>;
 
 /// Convenience type alias that is a tuple of a token and an index.
-pub type AtToken<'a> = AtWith<Token<'a>>;
+pub type AtToken<'a, Custom> = AtWith<Token<'a, Custom>>;
 
 /// Convenience type alias that is a tuple of a text and an index.
 pub type AtText<'a> = AtWith<Text<'a>>;
@@ -27,26 +27,56 @@ pub type AtText<'a> = AtWith<Text<'a>>;
 /// more optimized way for your types.
 pub trait Parser {
     /// Parses self for tokens.
-    fn parse_md(&self) -> Vec<Token<'_>> {
+    fn parse_md(&self) -> Vec<Token<'_, ()>> {
         let mut tokens = Vec::new();
         self.parse_md_with_buf(&mut tokens);
         tokens
     }
     /// Parses self for tokens, and outputs to a buffer.
-    fn parse_md_with_buf<'a>(&'a self, buf: &mut Vec<Token<'a>>) {
+    fn parse_md_with_buf<'a>(&'a self, buf: &mut Vec<Token<'a, ()>>) {
         let mut at = 0;
-        while let Some((token, nat)) = self.parse_token(at) {
+        while let Some((token, nat)) = self.parse_token(at, |_, _| None) {
             at = nat;
             buf.push(token);
         }
     }
-    fn parse_token(&self, at: usize) -> Option<AtToken<'_>> {
+    /// Parses self for tokens, with a custom token producer.
+    fn parse_md_custom<Custom, CustomFn: Copy + Fn(&Self, usize) -> Option<AtToken<'_, Custom>>>(
+        &self,
+        custom: CustomFn,
+    ) -> Vec<Token<'_, Custom>> {
+        let mut tokens = Vec::new();
+        self.parse_md_with_buf_custom(&mut tokens, custom);
+        tokens
+    }
+    /// Parses self for tokens, and outputs to a buffer, with a custom token producer.
+    fn parse_md_with_buf_custom<
+        'a,
+        Custom,
+        CustomFn: Copy + Fn(&Self, usize) -> Option<AtToken<'_, Custom>>,
+    >(
+        &'a self,
+        buf: &mut Vec<Token<'a, Custom>>,
+        custom: CustomFn,
+    ) {
+        let mut at = 0;
+        while let Some((token, nat)) = self.parse_token(at, custom) {
+            at = nat;
+            buf.push(token);
+        }
+    }
+    fn parse_token<Custom, CustomFn: Fn(&Self, usize) -> Option<AtToken<'_, Custom>>>(
+        &self,
+        at: usize,
+        custom: CustomFn,
+    ) -> Option<AtToken<'_, Custom>> {
         self.eof(at)
             .not()
             .then(|| {
                 self.consume_whitespace(at)
                     .map(|(_, at)| {
                         self.parse_line_break(at)
+                            .or_else(|| custom(self, at))
                             .or_else(|| self.parse_header(at))
                             .or_else(|| self.parse_list_item(at))
                             .or_else(|| self.parse_texty(at))
@@ -56,12 +86,12 @@ pub trait Parser {
             .flatten()
     }
     #[inline(always)]
-    fn parse_texty(&self, at: usize) -> Option<AtToken<'_>> {
+    fn parse_texty<Custom>(&self, at: usize) -> Option<AtToken<'_, Custom>> {
         self.parse_code(at)
             .or_else(|| self.parse_inline_url(at))
             .or_else(|| self.parse_text(at).map(|(t, at)| (t.into_token(), at)))
     }
-    fn parse_code(&self, at: usize) -> Option<AtToken<'_>> {
+    fn parse_code<Custom>(&self, at: usize) -> Option<AtToken<'_, Custom>> {
         self.consume_while(at, is_backtick)
             .ok()
             .flatten()
@@ -75,13 +105,13 @@ pub trait Parser {
             })
             .flatten()
     }
-    fn parse_inline_code(&self, at: usize) -> Option<AtToken<'_>> {
+    fn parse_inline_code<Custom>(&self, at: usize) -> Option<AtToken<'_, Custom>> {
         self.consume_while(at, |c| is_backtick(c).not())
             .ok()
             .flatten()
             .map(|(value, at)| (Text::code(value).into_token(), at + 1))
     }
-    fn parse_list_item(&self, at: usize) -> Option<AtToken<'_>> {
+    fn parse_list_item<Custom>(&self, at: usize) -> Option<AtToken<'_, Custom>> {
         self.consume_char_if(at, |c| matches!(c, '-' | '+' | '*'))
             .map(|nat| (None, nat))
             .or_else(|| {
@@ -102,7 +132,7 @@ pub trait Parser {
             })
             .flatten()
     }
-    fn parse_code_fence(&self, at: usize) -> Option<AtToken<'_>> {
+    fn parse_code_fence<Custom>(&self, at: usize) -> Option<AtToken<'_, Custom>> {
         self.consume_until_str(at, "```")
             .ok()
             .flatten()
@@ -121,7 +151,7 @@ pub trait Parser {
                 (Token::CodeFence { code, attrs }, at + 3)
             })
     }
-    fn parse_header(&self, at: usize) -> Option<AtToken<'_>> {
+    fn parse_header<Custom>(&self, at: usize) -> Option<AtToken<'_, Custom>> {
         self.consume_while(at, |c| c == '#')
             .ok()
             .flatten()
@@ -140,7 +170,7 @@ pub trait Parser {
             })
             .flatten()
     }
-    fn parse_inline_url(&self, at: usize) -> Option<AtToken<'_>> {
+    fn parse_inline_url<Custom>(&self, at: usize) -> Option<AtToken<'_, Custom>> {
         self.consume_char_if(at, |c| c == '<')
             .map(|nat| {
                 self.consume_while(nat, |c| c != '>')
@@ -195,7 +225,7 @@ pub trait Parser {
                     .map_or_else(try_handle_err, |v| v.map(|(s, nat)| (Text::naked(s), nat)))
             })
     }
-    fn parse_line_break(&self, at: usize) -> Option<AtToken<'_>> {
+    fn parse_line_break<Custom>(&self, at: usize) -> Option<AtToken<'_, Custom>> {
         self.consume_char_if(at, |c| c == '\n')
             .map(|nat| (Token::LineBreak, nat))
     }
@@ -309,7 +339,7 @@ const fn is_backtick(c: char) -> bool {
 
 /// A token from some parsed text.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Token<'a> {
+pub enum Token<'a, Custom> {
     /// Some text.
     Text(Text<'a>),
     /// An URL.
@@ -329,6 +359,8 @@ pub enum Token<'a> {
     CodeFence { code: &'a str, attrs: &'a str },
     /// A line break.
     LineBreak,
+    /// A custom token.
+    Custom(Custom),
 }
 
 /// Some text.
@@ -366,7 +398,7 @@ impl<'a> Text<'a> {
     }
 
     /// Convert this text into a token.
-    pub const fn into_token(self) -> Token<'a> {
+    pub const fn into_token<Custom>(self) -> Token<'a, Custom> {
         Token::Text(self)
     }
 }

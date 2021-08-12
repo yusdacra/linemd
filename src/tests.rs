@@ -63,7 +63,7 @@ fn code_fence() {
 
 #[test]
 fn bold_or_italic_text() {
-    fn text_test(parsed: Vec<Token>, bold: bool, italic: bool) {
+    fn text_test(parsed: Vec<Token<()>>, bold: bool, italic: bool) {
         assert_eq!(
             parsed,
             vec![Token::Text(Text {
@@ -159,7 +159,7 @@ fn header() {
     );
 }
 
-fn ordered_test(parsed: Vec<Token>, place: usize) {
+fn ordered_test(parsed: Vec<Token<()>>, place: usize) {
     assert_eq!(
         parsed,
         vec![
@@ -186,7 +186,7 @@ fn ordered_list_wrong() {
 
 #[test]
 fn unordered_lists() {
-    fn unordered_test(parsed: Vec<Token>) {
+    fn unordered_test(parsed: Vec<Token<()>>) {
         assert_eq!(
             parsed,
             vec![Token::ListItem(None), Text::naked("ada").into_token()]

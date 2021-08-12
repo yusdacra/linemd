@@ -10,7 +10,7 @@ use core::fmt::Write;
 /// # use linemd::{render_as_html, Parser};
 /// let html = render_as_html("Some uninspiring text.".parse_md());
 /// ```
-pub fn render_as_html<'a>(tokens: impl AsRef<[Token<'a>]> + 'a) -> String {
+pub fn render_as_html<'a>(tokens: impl AsRef<[Token<'a, ()>]> + 'a) -> String {
     let mut buf = String::new();
     render_to_buffer(tokens, &mut buf);
     buf
@@ -24,7 +24,7 @@ pub fn render_as_html<'a>(tokens: impl AsRef<[Token<'a>]> + 'a) -> String {
 /// let mut buffer = String::new();
 /// let html = html::render_to_buffer("Some uninspiring text.".parse_md(), &mut buffer);
 /// ```
-pub fn render_to_buffer<'a>(tokens: impl AsRef<[Token<'a>]> + 'a, buf: &mut String) {
+pub fn render_to_buffer<'a>(tokens: impl AsRef<[Token<'a, ()>]> + 'a, buf: &mut String) {
     let mut in_unordered_list = false;
     let mut in_ordered_list = false;
 
@@ -116,7 +116,7 @@ fn write_text<W: Write>(buf: &mut W, t: &Text) {
     .unwrap()
 }
 
-fn write_until_line_break<W: Write>(buf: &mut W, tokens: &[Token], mut at: usize) -> usize {
+fn write_until_line_break<W: Write>(buf: &mut W, tokens: &[Token<()>], mut at: usize) -> usize {
     while at < tokens.len() {
         if matches!(&tokens[at], Token::LineBreak) {
             break;
@@ -126,7 +126,7 @@ fn write_until_line_break<W: Write>(buf: &mut W, tokens: &[Token], mut at: usize
     at
 }
 
-fn write_token_as_html<W: Write>(buf: &mut W, tokens: &[Token], mut at: usize) -> usize {
+fn write_token_as_html<W: Write>(buf: &mut W, tokens: &[Token<()>], mut at: usize) -> usize {
     match &tokens[at] {
         Token::Text(t) => write_text(buf, t),
         Token::CodeFence { code, attrs: _ } => {
@@ -174,6 +174,7 @@ fn write_token_as_html<W: Write>(buf: &mut W, tokens: &[Token], mut at: usize) -
             return at;
         }
         Token::LineBreak => buf.write_char('\n').unwrap(),
+        Token::Custom(_) => {}
     }
     at + 1
 }
